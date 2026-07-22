@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# Outside imports
+raylib-6.0/
+
+# Build
+build/
