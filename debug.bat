@@ -47,11 +47,8 @@ cd %workdir%
 GOTO end
 
 :debugWebBuild
-SET workdir=%cd%
-cd %cd%\build\web\debug\
 start "" http://localhost:8080/%PROJECT_NAME%.html
-emrun %PROJECT_NAME%.html
-cd %workdir%
+emrun %cd%\build\web\debug\%PROJECT_NAME%.html
 GOTO end
 
 :end
