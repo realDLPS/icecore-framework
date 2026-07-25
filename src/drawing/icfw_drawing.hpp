@@ -6,6 +6,7 @@
 
 #include <vector>
 
+
 struct icfw_sprite
 {
     Texture2D texture;
@@ -30,6 +31,37 @@ struct icfw_sprite_patch : icfw_sprite
     int right;
     int bottom;
 };
+struct icfw_camera
+{
+    Vector2 location = Vec2(0.0f, 0.0f);
+    float zoom = 1.0f;
+    float rotation = 0.0f;
+};
+
+static icfw_camera default_camera = icfw_camera();
+
+float GetScreenSizeScaling()
+{
+    return (GetRenderWidth() / 1920.0f >= GetRenderHeight() / 1080.0f) ? GetRenderWidth() / 1920.0f : GetRenderHeight() / 1080.0f;
+}
+
+Vector2 WorldToViewSpace(Vector2 worldPosition)
+{
+    // Convert to camera position, basically relative to the camera
+    Vector2 WorkingPosition = worldPosition * Vec2(1, -1) - default_camera.location * Vec2(1, -1);
+
+    // Zooming
+    WorkingPosition = WorkingPosition * default_camera.zoom;
+
+    // Screen sizing
+    // Things scale properly if the window is resized
+    WorkingPosition = WorkingPosition * GetScreenSizeScaling();
+
+    // Rotating the position (and going from degrees to radians)
+    WorkingPosition = Vector2Rotate(WorkingPosition, default_camera.rotation * 0.0174533f);
+
+    return WorkingPosition + Vec2(float(GetScreenWidth()) / 2.0f, float(GetScreenHeight()) / 2.0f);
+}
 
 void DrawSprite(icfw_sprite_patch sprite, Vector2 location, float rotation, Vector2 scale, Color tint, int frame)
 {
@@ -42,17 +74,45 @@ void DrawSprite(icfw_sprite_patch sprite, Vector2 location, float rotation, Vect
     source.width = frame_width;
     source.height = frame_height;
 
+    // Scaling to account for multiple frames in a single texture
+    float xScale = source.width / sprite.texture.width;
+	float yScale = source.height / sprite.texture.height;
 
+    // This can be redone to support differently sorted sprite sheets
+    // Currently frames are expected to be sorted in the way shown below
+    // 0 1 2
+    // 3 4 5
+    // 6 7 8
+    int x = frame % sprite.row_count;
+	int y = frame / sprite.row_count;
+	source.x = x * frame_width;
+	source.y = y * frame_height;
+
+    NPatchInfo PatchInfo = NPatchInfo();
+    PatchInfo.bottom = sprite.bottom;
+    PatchInfo.layout = sprite.layout;
+    PatchInfo.left = sprite.left;
+    PatchInfo.right = sprite.right;
+    PatchInfo.source = source;
+    PatchInfo.top = sprite.top;
+
+    auto view_space_location = WorldToViewSpace(location);
+
+    Rectangle dest = { view_space_location.x, view_space_location.y, (float)sprite.texture.width*scale.x, (float)sprite.texture.height*scale.y };
+
+    DrawTextureNPatch(
+        sprite.texture,
+        PatchInfo,
+        dest,
+        Vec2(dest.width / 2, dest.height / 2),
+        rotation,
+        tint
+    );
 }
 
-struct icfw_camera
-{
-    Vector2 location = Vec2(0.0f, 0.0f);
-    float zoom = 1.0f;
-    float rotation = 0.0f;
-};
 
-static icfw_camera default_camera = icfw_camera();
+
+
 void SetDefaultCameraLocation(Vector2 location) { default_camera.location = location; }
 Vector2 GetDefaultCameraLocation() { return default_camera.location; }
 void SetDefaultCameraZoom(float zoom) { default_camera.zoom = zoom; }

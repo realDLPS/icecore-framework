@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
-set(APP_TARGET icecoreframework)
+file(READ "${CMAKE_SOURCE_DIR}/project.ini" PROJECT_INI)
+string(REGEX MATCH "project-name=([^\r\n]+)" _ "${PROJECT_INI}")
+set(APP_TARGET "${CMAKE_MATCH_1}")
 
 project(${APP_TARGET})
 
@@ -19,15 +21,15 @@ add_executable(${APP_TARGET}
     src/math/vector.hpp
 )
 
-target_compile_options(icecoreframework PRIVATE
+target_compile_options(${APP_TARGET} PRIVATE
     -Wall
 )
 
-target_compile_options(icecoreframework PRIVATE
+target_compile_options(${APP_TARGET} PRIVATE
     $<$<CONFIG:Release>:-O3 -fno-ident -flto -ffunction-sections -fdata-sections>
 )
 
-target_link_options(icecoreframework PRIVATE
+target_link_options(${APP_TARGET} PRIVATE
     $<$<CONFIG:Release>:-s -Wl,--gc-sections>
 )
 

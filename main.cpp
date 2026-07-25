@@ -1,10 +1,23 @@
 #include "raylib-6.0/src/raylib.h"
 
+#include <string>
+
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
 #endif
 
+#include "src/window/multiplatform_window.hpp"
 
+void tick(float deltaTime)
+{
+    BeginDrawing();
+
+        ClearBackground(RAYWHITE);
+
+        DrawText((std::to_string(1.f / deltaTime).c_str()), 190, 200, 20, LIGHTGRAY);
+
+    EndDrawing();
+}
 
 int main(void)
 {
@@ -13,43 +26,10 @@ int main(void)
     const int screenWidth = 800;
     const int screenHeight = 450;
 
-    InitWindow(screenWidth, screenHeight, "raylib [core] example - basic window");
+    MP_SetMaxFPS(120);
+    MP_InitWindow(tick, screenWidth, screenHeight, "raylib [core] example - basic window");
 
-    SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
-    //--------------------------------------------------------------------------------------
-
-    BeginDrawing();
-
-            ClearBackground(RAYWHITE);
-
-            DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
-
-        EndDrawing();
-
-    // Main game loop
-    while (!WindowShouldClose())    // Detect window close button or ESC key'
-    {
-        // Update
-        //----------------------------------------------------------------------------------
-        // TODO: Update your variables here
-        //----------------------------------------------------------------------------------
-
-        // Draw
-        //----------------------------------------------------------------------------------
-        BeginDrawing();
-
-            ClearBackground(RAYWHITE);
-
-            DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
-
-        EndDrawing();
-        //----------------------------------------------------------------------------------
-    }
-
-    // De-Initialization
-    //--------------------------------------------------------------------------------------
     CloseWindow();        // Close window and OpenGL context
-    //--------------------------------------------------------------------------------------
 
     return 0;
 }
