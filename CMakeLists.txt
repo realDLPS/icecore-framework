@@ -30,7 +30,7 @@ target_compile_options(${APP_TARGET} PRIVATE
 )
 
 target_link_options(${APP_TARGET} PRIVATE
-    $<$<CONFIG:Release>:-s -Wl,--gc-sections>
+    $<$<CONFIG:Debug>:-s -Wl,--gc-sections>
 )
 
 find_program(UPX_EXECUTABLE upx)
@@ -47,6 +47,10 @@ endif()
 
 if(EMSCRIPTEN)
     set_target_properties(${APP_TARGET} PROPERTIES SUFFIX ".html")
+
+    target_link_options(${APP_TARGET} PRIVATE
+        --emrun
+    )
 endif()
 
 if(ipo_supported)

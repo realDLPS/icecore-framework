@@ -50,7 +50,7 @@ GOTO end
 SET workdir=%cd%
 cd %cd%\build\web\debug\
 start "" http://localhost:8080/%PROJECT_NAME%.html
-python3 -m http.server 8080
+emrun %PROJECT_NAME%.html
 cd %workdir%
 GOTO end
 
