@@ -36,3 +36,6 @@ raylib-6.0/
 
 # Build
 build/
+
+# Emscripten
+emsdk/
