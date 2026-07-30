@@ -17,8 +17,7 @@ add_subdirectory(raylib-6.0)
 
 add_executable(${APP_TARGET}
     main.cpp
-    src/drawing/icfw_drawing.hpp
-    src/math/vector.hpp
+    src/icecore_framework.hpp
 )
 
 target_compile_options(${APP_TARGET} PRIVATE

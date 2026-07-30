@@ -6,10 +6,17 @@
 #include <emscripten/emscripten.h>
 #endif
 
-#include "src/window/multiplatform_window.hpp"
+#define ICFW_DRAWING
+#define ICFW_WINDOW
+#include "src/icecore_framework.hpp"
 
 void tick(float deltaTime)
 {
+    if(IsKeyPressed(KEY_ESCAPE))
+    {
+        MP_Exit();
+    }
+
     BeginDrawing();
 
         ClearBackground(RAYWHITE);
