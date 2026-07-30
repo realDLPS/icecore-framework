@@ -8,6 +8,7 @@
 
 #define ICFW_DRAWING
 #define ICFW_WINDOW
+#define ICFW_INPUT
 #include "src/icecore_framework.hpp"
 
 void tick(float deltaTime)

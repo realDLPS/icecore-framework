@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../raylib-6.0/src/raylib.h"
+
 #pragma region Vector helpers
 #include "../raylib-6.0/src/raylib.h"
 #include "../raylib-6.0/src/raymath.h"
@@ -28,11 +30,11 @@ inline Vector2 rotVec2(Vector2 v, float angle)
 #pragma endregion
 
 
+
+
+
 #pragma region ICFW_WINDOW
 #if defined(ICFW_WINDOW) // Multiplatform window
-
-#include "../raylib-6.0/src/raylib.h"
-
 #include <string>
 #include <functional>
 
@@ -54,17 +56,29 @@ namespace engine {
 
 #endif
 
+namespace engine {
+void internal_tick(float delta_time)
+{
+    #if defined(ICFW_INPUT)
+    #endif
+}
+}
+
 #if defined(PLATFORM_WEB)
+namespace engine {
 void web_tick(void)
 {
+    double delta = emscripten_get_now() - last_frame_time;
+    engine::internal_tick(float(delta) / 1000.f)
+
     int frame_width = 0;
     int frame_height = 0;
     emscripten_get_screen_size(&frame_width, &frame_height);
     SetWindowSize(std::min(target_width, frame_width), std::min(target_height, frame_height));
 
-    double delta = emscripten_get_now() - last_frame_time;
     web_tick_func(float(delta) / 1000.f);
     last_frame_time += delta;
+}
 }
 #endif
 
@@ -80,6 +94,7 @@ void MP_InitWindow(std::function<void (float deltaTime)> tick, int width=640, in
     #else
     while(!engine::exit_started)
     {
+        engine::internal_tick(GetFrameTime());
         tick(GetFrameTime());
     }
     #endif
@@ -101,13 +116,14 @@ void MP_Exit()
 #endif
 #pragma endregion
 
+
+
+
+
 #pragma region ICFW_DRAWING
 #if defined (ICFW_DRAWING)
 // simplified sprite based drawing for raylib
 // :)
-
-#include "../raylib-6.0/src/raylib.h"
-
 #include <vector>
 #include <memory>
 #include <map>
@@ -336,5 +352,174 @@ void DrawQueue(icfw_draw_queue &draw_queue, icfw_camera &camera, RenderTexture2D
 
     EndTextureMode();
 }
+#endif
+#pragma endregion
+
+
+
+
+
+#pragma region ICFW_INPUT
+#if defined(ICFW_INPUT)
+#include <vector>
+
+enum icfw_input_mode
+{
+    disabled = 1,
+    game = 2,
+#if defined(ICFW_UI)
+    ui = 3,
+    game_ui = 4,
+    ui_game = 5,
+#endif
+};
+
+
+enum icfw_input_value_type
+{
+    digital = 1,
+    single_axis = 2,
+};
+
+enum icfw_mouse_inputs
+{
+    mouse_left = 1,
+    mouse_right = 2,
+    mouse_middle = 3,
+    mouse_forward = 4,
+    mouse_back = 5,
+    mouse_side = 6,
+    mouse_extra = 7,
+    mouse_scroll = 8,
+    mouse_x = 9,
+    mouse_y = 10,
+};
+namespace engine{
+    // Mappings of icfw mouse inputs to raylib mouse inputs
+    int mouse_mapping[7] = {MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_MIDDLE_BUTTON, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_BACK, MOUSE_BUTTON_SIDE, MOUSE_BUTTON_EXTRA};
+}
+
+enum icfw_gamepad_inputs
+{
+    gamepad_button_unknown = 1,
+    gamepad_button_left_face_up = 2,
+    gamepad_button_left_face_right = 3,
+    gamepad_button_left_face_down = 4,
+    gamepad_button_left_face_left = 5,
+    gamepad_button_right_face_up = 6,
+    gamepad_button_right_face_right = 7,
+    gamepad_button_right_face_down = 8,
+    gamepad_button_right_face_left = 9,
+    gamepad_button_left_trigger_1 = 10,
+    gamepad_button_left_trigger_2 = 11,
+    gamepad_button_right_trigger_1 = 12,
+    gamepad_button_right_trigger_2 = 13,
+    gamepad_button_middle_left = 14,
+    gamepad_button_middle = 15,
+    gamepad_button_middle_right = 16,
+    gamepad_button_left_thumb = 17,
+    gamepad_button_right_thumb = 18,
+    gamepad_axis_left_x = 19,
+    gamepad_axis_left_y = 20,
+    gamepad_axis_right_x = 21,
+    gamepad_axis_right_y = 22,
+    gamepad_axis_left_trigger = 23,
+    gamepad_axis_right_trigger = 24,
+};
+namespace engine{
+    // Mappings of icfw gamepad inputs to raylib gamepad inputs
+    int gamepad_mapping[24] = {GAMEPAD_BUTTON_UNKNOWN, GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT, GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT, GAMEPAD_BUTTON_RIGHT_FACE_UP, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_LEFT_TRIGGER_1, GAMEPAD_BUTTON_LEFT_TRIGGER_2, GAMEPAD_BUTTON_RIGHT_TRIGGER_1, GAMEPAD_BUTTON_RIGHT_TRIGGER_2, GAMEPAD_BUTTON_MIDDLE_LEFT, GAMEPAD_BUTTON_MIDDLE, GAMEPAD_BUTTON_MIDDLE_RIGHT, GAMEPAD_BUTTON_LEFT_THUMB, GAMEPAD_BUTTON_RIGHT_THUMB, GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y, GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y, GAMEPAD_AXIS_LEFT_TRIGGER, GAMEPAD_AXIS_RIGHT_TRIGGER};
+}
+
+struct icfw_input_trigger
+{
+    int index = 0;
+    float multiplier = 1.0f;
+    virtual float GetValue()
+    {
+        return 0.0f;
+    }
+};
+struct icfw_keyboard_trigger : icfw_input_trigger
+{
+    const icfw_keyboard_trigger KEYBOARD_TRIGGER(KeyboardKey key, float multiplier = 1.0f)
+    {
+        auto a = icfw_keyboard_trigger();
+        a.index = key;
+        a.multiplier = multiplier;
+        return a;
+    }
+    float GetValue()
+    {
+        return IsKeyDown(index) ? multiplier : 0.0f;
+    }
+};
+struct icfw_mouse_trigger : icfw_input_trigger
+{
+    const icfw_mouse_trigger MOUSE_TRIGGER(icfw_mouse_inputs mouse_input, float multiplier = 1.0f)
+    {
+        auto a = icfw_mouse_trigger();
+        a.index = mouse_input;
+        a.multiplier = multiplier;
+        return a;
+    }
+    float GetValue()
+    {
+        if(index < 8)
+        {
+            return IsMouseButtonDown(engine::mouse_mapping[index]) ? multiplier : 0.0f;
+        }
+        else if(index == 8)
+        {
+            return GetMouseWheelMove() * multiplier;
+        }
+        else if(index == 9)
+        {
+            return GetMouseDelta().x * multiplier; 
+        }
+        else if(index == 10)
+        {
+            return GetMouseDelta().y * multiplier; 
+        }
+        return 0.0f;
+    }
+};
+struct icfw_gamepad_trigger : icfw_input_trigger
+{
+    const icfw_gamepad_trigger GAMEPAD_TRIGGER(icfw_gamepad_inputs gamepad_input, float multiplier = 1.0f)
+    {
+        auto a = icfw_gamepad_trigger();
+        a.index = gamepad_input;
+        a.multiplier = multiplier;
+        return a;
+    }
+    float GetValue()
+    {
+        if(!IsGamepadAvailable(0))
+        {
+            return 0.0f;
+        }
+        if(index < 19)
+        {
+            return IsGamepadButtonDown(0, engine::gamepad_mapping[index]) ? multiplier : 0.0f;
+        }
+        else
+        {
+            return GetGamepadAxisMovement(0, engine::gamepad_mapping[index]) * multiplier;
+        }
+    }
+};
+
+struct icfw_input_action
+{
+    icfw_input_value_type value_type = digital;
+    std::vector<icfw_input_trigger> triggers;
+    bool consume_input = true;
+};
+
+struct icfw_input_mapping
+{
+    std::vector<icfw_input_action> actions;
+};
 #endif
 #pragma endregion
