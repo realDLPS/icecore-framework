@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 file(READ "${CMAKE_SOURCE_DIR}/project.ini" PROJECT_INI)
 string(REGEX MATCH "project-name=([^\r\n]+)" _ "${PROJECT_INI}")
 set(APP_TARGET "${CMAKE_MATCH_1}")
@@ -7,7 +9,7 @@ set(APP_TARGET "${CMAKE_MATCH_1}")
 project(${APP_TARGET})
 
 set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(CheckIPOSupported)

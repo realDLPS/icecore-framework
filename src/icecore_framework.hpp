@@ -289,7 +289,12 @@ void DrawSprite(icfw_sprite sprite, Vector2 location = Vec2(0.0f), float rotatio
 
     auto view_space_location = WorldToViewSpace(location, camera);
 
-    Rectangle dest = { view_space_location.x, view_space_location.y, (float)sprite.texture.width*scale.x*xScale*GetScreenSizeScaling()*camera.zoom, (float)sprite.texture.height*scale.y*yScale*GetScreenSizeScaling()*camera.zoom };
+    Rectangle dest = { 
+        view_space_location.x, 
+        view_space_location.y, 
+        (float)sprite.texture.width*scale.x*xScale*GetScreenSizeScaling()*camera.zoom, 
+        (float)sprite.texture.height*scale.y*yScale*GetScreenSizeScaling()*camera.zoom 
+    };
 
     DrawTextureNPatch(
         sprite.texture,
@@ -362,6 +367,13 @@ void DrawQueue(icfw_draw_queue &draw_queue, icfw_camera &camera, RenderTexture2D
 #pragma region ICFW_INPUT
 #if defined(ICFW_INPUT)
 #include <vector>
+#include <string>
+#include <map>
+#include <functional>
+#include <variant>
+#include <unordered_set>
+#include <algorithm>
+#include <unordered_map>
 
 enum icfw_input_mode
 {
@@ -379,6 +391,14 @@ enum icfw_input_value_type
 {
     digital = 1,
     single_axis = 2,
+};
+enum icfw_digital_action_state
+{
+    press_started = 1,
+    held_down = 2,
+    press_finished = 3,
+    up = 4,
+    consumed = 5,
 };
 
 enum icfw_mouse_inputs
@@ -435,9 +455,10 @@ struct icfw_input_trigger
 {
     int index = 0;
     float multiplier = 1.0f;
-    virtual float GetValue()
+    // Returns true if input is consumed
+    virtual std::tuple<bool, float> GetValue()
     {
-        return 0.0f;
+        return {false, 0.0f};
     }
 };
 struct icfw_keyboard_trigger : icfw_input_trigger
@@ -449,9 +470,16 @@ struct icfw_keyboard_trigger : icfw_input_trigger
         a.multiplier = multiplier;
         return a;
     }
-    float GetValue()
+    std::tuple<bool, float> GetValue()
     {
-        return IsKeyDown(index) ? multiplier : 0.0f;
+        if(!engine::consumed_keyboard_buttons.contains(index))
+        {
+            return {false, engine::current_state.keyboard_buttons[index] ? multiplier : 0.0f};
+        }
+        else
+        {
+            return {true, 0.0f};
+        }
     }
 };
 struct icfw_mouse_trigger : icfw_input_trigger
@@ -463,25 +491,31 @@ struct icfw_mouse_trigger : icfw_input_trigger
         a.multiplier = multiplier;
         return a;
     }
-    float GetValue()
+    std::tuple<bool, float> GetValue()
     {
         if(index < 8)
         {
-            return IsMouseButtonDown(engine::mouse_mapping[index]) ? multiplier : 0.0f;
+            if(!engine::consumed_mouse_buttons.contains(engine::mouse_mapping[index]))
+            {
+                return {false, engine::current_state.mouse_buttons[engine::mouse_mapping[index]] ? multiplier : 0.0f};
+            }
+            else
+            {
+                return {true, 0.0f};
+            }
         }
-        else if(index == 8)
+        else
         {
-            return GetMouseWheelMove() * multiplier;
+            if(!engine::consumed_mouse_axis.contains(index))
+            {
+                return {false, engine::current_state.mouse_axis[index] * multiplier};
+            }
+            else
+            {
+                return {true, 0.0f};
+            }
         }
-        else if(index == 9)
-        {
-            return GetMouseDelta().x * multiplier; 
-        }
-        else if(index == 10)
-        {
-            return GetMouseDelta().y * multiplier; 
-        }
-        return 0.0f;
+        return {false, 0.0f};
     }
 };
 struct icfw_gamepad_trigger : icfw_input_trigger
@@ -493,19 +527,33 @@ struct icfw_gamepad_trigger : icfw_input_trigger
         a.multiplier = multiplier;
         return a;
     }
-    float GetValue()
+    std::tuple<bool, float> GetValue()
     {
         if(!IsGamepadAvailable(0))
         {
-            return 0.0f;
+            return {false, 0.0f};
         }
         if(index < 19)
         {
-            return IsGamepadButtonDown(0, engine::gamepad_mapping[index]) ? multiplier : 0.0f;
+            if(!engine::consumed_gamepad_buttons.contains(engine::gamepad_mapping[index]))
+            {
+                return {false, engine::current_state.gamepad_buttons[engine::gamepad_mapping[index]] ? multiplier : 0.0f};
+            }
+            else
+            {
+                return {true, 0.0f};
+            }
         }
         else
         {
-            return GetGamepadAxisMovement(0, engine::gamepad_mapping[index]) * multiplier;
+            if(!engine::consumed_gamepad_axis.contains(engine::gamepad_mapping[index]))
+            {
+                return {false, engine::current_state.gamepad_axis[engine::gamepad_mapping[index]] * multiplier};
+            }
+            else
+            {
+                return {true, 0.0f};
+            }
         }
     }
 };
@@ -513,13 +561,202 @@ struct icfw_gamepad_trigger : icfw_input_trigger
 struct icfw_input_action
 {
     icfw_input_value_type value_type = digital;
+    std::variant<icfw_digital_action_state, bool> last_state = false;
     std::vector<icfw_input_trigger> triggers;
-    bool consume_input = true;
+    std::variant<std::function<bool (icfw_digital_action_state)>, std::function<bool (float)>> callback;
 };
-
 struct icfw_input_mapping
 {
     std::vector<icfw_input_action> actions;
 };
+
+struct icfw_input_state
+{
+    std::unordered_map<int, bool> keyboard_buttons;
+    std::unordered_map<int, bool> mouse_buttons;
+    std::unordered_map<int, float> mouse_axis;
+    std::unordered_map<int, bool> gamepad_buttons;
+    std::unordered_map<int, float> gamepad_axis;
+};
+
+namespace engine {
+    static std::vector<icfw_input_mapping> input_mappings;
+    static std::map<std::string, int> input_mapping_names;
+    static std::string current_input_mapping = "";
+
+    // These are updated any time input mapping is changed
+    static std::vector<int> keyboard_buttons_to_gather;
+    static std::vector<int> mouse_buttons_to_gather;
+    static std::vector<int> mouse_axis_to_gather;
+    static std::vector<int> gamepad_buttons_to_gather;
+    static std::vector<int> gamepad_axis_to_gather;
+
+    // These are updated each frame
+    static icfw_input_state current_state;
+
+    static std::unordered_set<int> consumed_keyboard_buttons;
+    static std::unordered_set<int> consumed_mouse_buttons;
+    static std::unordered_set<int> consumed_mouse_axis;
+    static std::unordered_set<int> consumed_gamepad_buttons;
+    static std::unordered_set<int> consumed_gamepad_axis;
+}
+
+void AddMapping(icfw_input_mapping mapping, std::string name="")
+{
+    int target_index = (int)engine::input_mappings.size();
+    std::string target_name = name;
+    if(target_name=="")
+    {
+        target_name = std::to_string(target_index); // If no name is provided use the index the mapping will be assigned as the name
+    }
+    auto itr = engine::input_mapping_names.find(name);
+    if(itr != engine::input_mapping_names.end())
+    {
+        target_index = itr->second; // If mapping with the same name already exists update that
+    }
+
+    engine::input_mappings[target_index] = mapping;
+    engine::input_mapping_names[target_name] = target_index;
+}
+
+namespace engine {
+    // Removes duplicate integers from a vector
+    void RemoveDuplicates(std::vector<int> &v)
+    {
+        std::unordered_set<int> seen;
+        v.erase(std::remove_if(v.begin(), v.end(), [&](int x) { return !seen.insert(x).second; }), v.end());
+    }
+}
+
+// Loads a mapping based on it's name
+// Add a mapping first using AddMapping()
+void LoadMapping(std::string name)
+{
+    engine::current_input_mapping = name;
+
+    engine::keyboard_buttons_to_gather.clear();
+    engine::mouse_buttons_to_gather.clear();
+    engine::mouse_axis_to_gather.clear();
+    engine::gamepad_buttons_to_gather.clear();
+    engine::gamepad_axis_to_gather.clear();
+
+    engine::current_state = icfw_input_state();
+    engine::last_state = icfw_input_state();
+
+    if(name == "")  {   return;   }
+
+    icfw_input_mapping loaded_mapping = engine::input_mappings[engine::input_mapping_names[name]];
+
+    for (size_t i = 0; i < loaded_mapping.actions.size(); i++) // Loop through all actions and their triggers and add them to the gather lists
+    {
+        auto a = loaded_mapping.actions[(int)i];
+        for (size_t j = 0; j < a.triggers.size(); j++)
+        {
+            if(auto* c = dynamic_cast<icfw_keyboard_trigger*>(&a.triggers[j]))
+            {
+                engine::keyboard_buttons_to_gather.push_back(c->index);
+            }
+            if(auto* c = dynamic_cast<icfw_mouse_trigger*>(&a.triggers[j]))
+            {
+                if(c->index < 8)
+                {
+                    engine::mouse_buttons_to_gather.push_back(engine::mouse_mapping[c->index]);
+                }
+                else
+                {
+                    engine::mouse_axis_to_gather.push_back(c->index);
+                }
+            }
+            if(auto* c = dynamic_cast<icfw_gamepad_trigger*>(&a.triggers[j]))
+            {
+                if(c->index < 19)
+                {
+                    engine::gamepad_buttons_to_gather.push_back(engine::gamepad_mapping[c->index]);
+                }
+                else
+                {
+                    engine::gamepad_axis_to_gather.push_back(engine::gamepad_mapping[c->index]);
+                }
+            }
+        }
+        
+    }
+    
+    engine::RemoveDuplicates(engine::keyboard_buttons_to_gather);
+    engine::RemoveDuplicates(engine::mouse_buttons_to_gather);
+    engine::RemoveDuplicates(engine::mouse_axis_to_gather);
+    engine::RemoveDuplicates(engine::gamepad_buttons_to_gather);
+    engine::RemoveDuplicates(engine::gamepad_axis_to_gather);
+}
+
+void GatherInputs()
+{
+    engine::current_state = icfw_input_state();
+
+    for (int i = 0; i < (int)engine::keyboard_buttons_to_gather.size(); i++)
+    {
+        engine::current_state.keyboard_buttons[engine::keyboard_buttons_to_gather[i]] = IsKeyDown(engine::keyboard_buttons_to_gather[i]);
+    }
+    for (int i = 0; i < (int)engine::mouse_buttons_to_gather.size(); i++)
+    {
+        engine::current_state.mouse_buttons[engine::mouse_buttons_to_gather[i]] = IsMouseButtonDown(engine::mouse_buttons_to_gather[i]);
+    }
+    for (int i = 0; i < (int)engine::mouse_axis_to_gather.size(); i++)
+    {
+        float a = 0.0f;
+        if(engine::mouse_axis_to_gather[i] == 8)
+        {
+            a = GetMouseWheelMove();
+        }
+        else if(engine::mouse_axis_to_gather[i] == 9)
+        {
+            a = GetMouseDelta().x; 
+        }
+        else if(engine::mouse_axis_to_gather[i] == 10)
+        {
+            a = GetMouseDelta().y; 
+        }
+        engine::current_state.mouse_axis[engine::mouse_axis_to_gather[i]] = a;
+    }
+    for (int i = 0; i < (int)engine::gamepad_buttons_to_gather.size(); i++)
+    {
+        if(IsGamepadAvailable(0))
+        {
+            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[i]] = IsGamepadButtonDown(0, engine::gamepad_buttons_to_gather[i]);
+        }
+        else
+        {
+            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[i]] = 0.0f;
+        }
+    }
+    for (int i = 0; i < (int)engine::gamepad_axis_to_gather.size(); i++)
+    {
+        if(IsGamepadAvailable(0))
+        {
+            engine::current_state.gamepad_axis[engine::gamepad_axis_to_gather[i]] = GetGamepadAxisMovement(0, engine::gamepad_axis_to_gather[i]);
+        }
+        else
+        {
+            engine::current_state.gamepad_axis[engine::gamepad_axis_to_gather[i]] = 0.0f;
+        }
+    }
+}
+void UpdateActions()
+{
+    icfw_input_mapping current_mapping = engine::input_mappings[engine::input_mapping_names[engine::current_input_mapping]];
+
+    for (int i = 0; i < (int)current_mapping.actions.size(); i++)
+    {
+        auto& action = current_mapping.actions[i];
+        
+        for (int j = 0; j < action.triggers.size(); j++)
+        {
+            auto& trigger = action.triggers[j];
+        }
+        
+    }
+    
+}
+
 #endif
 #pragma endregion
