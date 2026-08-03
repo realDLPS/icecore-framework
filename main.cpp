@@ -13,11 +13,6 @@
 
 void tick(float deltaTime)
 {
-    if(IsKeyPressed(KEY_ESCAPE))
-    {
-        MP_Exit();
-    }
-
     BeginDrawing();
 
         ClearBackground(RAYWHITE);
@@ -27,12 +22,26 @@ void tick(float deltaTime)
     EndDrawing();
 }
 
+bool CloseWindowEvent(icfw_digital_action_state state, bool updated)
+{
+    if(updated && state == press_started)
+    {
+        MP_Exit();
+
+        return true;
+    }
+    return false;
+}
+
 int main(void)
 {
     // Initialization
     //--------------------------------------------------------------------------------------
     const int screenWidth = 800;
     const int screenHeight = 450;
+
+    AddMapping(INPUT_MAPPING({INPUT_ACTION(digital, {KEYBOARD_TRIGGER(KEY_ESCAPE)}, CloseWindowEvent)}), "default");
+    LoadMapping("default");
 
     MP_SetMaxFPS(120);
     MP_InitWindow(tick, screenWidth, screenHeight, "raylib [core] example - basic window");

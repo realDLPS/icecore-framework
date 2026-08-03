@@ -28,15 +28,16 @@ target_compile_options(${APP_TARGET} PRIVATE
 
 target_compile_options(${APP_TARGET} PRIVATE
     $<$<CONFIG:Release>:-O3 -fno-ident -flto -ffunction-sections -fdata-sections>
+    $<$<CONFIG:Debug>:-O0 -g>
 )
 
 target_link_options(${APP_TARGET} PRIVATE
-    $<$<CONFIG:Debug>:-s -Wl,--gc-sections>
+    $<$<CONFIG:Debug>:-Wl,--gc-sections>
 )
 
 find_program(UPX_EXECUTABLE upx)
 
-if(UPX_EXECUTABLE AND WIN32)
+if(UPX_EXECUTABLE AND WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
     add_custom_command(
         TARGET ${APP_TARGET}
         POST_BUILD
@@ -55,7 +56,7 @@ if(EMSCRIPTEN)
 endif()
 
 if(ipo_supported)
-    set_property(TARGET ${APP_TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    set_property(TARGET ${APP_TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION $<CONFIG:Release>)
 endif()
 
 target_link_libraries(${APP_TARGET} PRIVATE raylib)

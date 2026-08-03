@@ -56,10 +56,15 @@ namespace engine {
 
 #endif
 
+void GatherInputs();
+void UpdateActions();
+
 namespace engine {
 void internal_tick(float delta_time)
 {
     #if defined(ICFW_INPUT)
+    GatherInputs();
+    UpdateActions();
     #endif
 }
 }
@@ -375,6 +380,8 @@ void DrawQueue(icfw_draw_queue &draw_queue, icfw_camera &camera, RenderTexture2D
 #include <algorithm>
 #include <unordered_map>
 
+#include <iostream>
+
 enum icfw_input_mode
 {
     disabled = 1,
@@ -398,7 +405,6 @@ enum icfw_digital_action_state
     held_down = 2,
     press_finished = 3,
     up = 4,
-    consumed = 5,
 };
 
 enum icfw_mouse_inputs
@@ -451,6 +457,38 @@ namespace engine{
     int gamepad_mapping[24] = {GAMEPAD_BUTTON_UNKNOWN, GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT, GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT, GAMEPAD_BUTTON_RIGHT_FACE_UP, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_LEFT_TRIGGER_1, GAMEPAD_BUTTON_LEFT_TRIGGER_2, GAMEPAD_BUTTON_RIGHT_TRIGGER_1, GAMEPAD_BUTTON_RIGHT_TRIGGER_2, GAMEPAD_BUTTON_MIDDLE_LEFT, GAMEPAD_BUTTON_MIDDLE, GAMEPAD_BUTTON_MIDDLE_RIGHT, GAMEPAD_BUTTON_LEFT_THUMB, GAMEPAD_BUTTON_RIGHT_THUMB, GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y, GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y, GAMEPAD_AXIS_LEFT_TRIGGER, GAMEPAD_AXIS_RIGHT_TRIGGER};
 }
 
+struct icfw_input_mapping;
+struct icfw_input_state
+{
+    std::unordered_map<int, bool> keyboard_buttons = std::unordered_map<int, bool>();
+    std::unordered_map<int, bool> mouse_buttons = std::unordered_map<int, bool>();
+    std::unordered_map<int, float> mouse_axis = std::unordered_map<int, float>();
+    std::unordered_map<int, bool> gamepad_buttons = std::unordered_map<int, bool>();
+    std::unordered_map<int, float> gamepad_axis = std::unordered_map<int, float>();
+};
+
+namespace engine {
+    static std::vector<icfw_input_mapping> input_mappings = std::vector<icfw_input_mapping>();
+    static std::map<std::string, int> input_mapping_names = std::map<std::string, int>();
+    static std::string current_input_mapping = "";
+
+    // These are updated any time input mapping is changed
+    static std::vector<int> keyboard_buttons_to_gather = std::vector<int>();
+    static std::vector<int> mouse_buttons_to_gather = std::vector<int>();
+    static std::vector<int> mouse_axis_to_gather = std::vector<int>();
+    static std::vector<int> gamepad_buttons_to_gather = std::vector<int>();
+    static std::vector<int> gamepad_axis_to_gather = std::vector<int>();
+
+    // These are updated each frame
+    static icfw_input_state current_state = icfw_input_state();
+
+    static std::unordered_set<int> consumed_keyboard_buttons = std::unordered_set<int>();
+    static std::unordered_set<int> consumed_mouse_buttons = std::unordered_set<int>();
+    static std::unordered_set<int> consumed_mouse_axis = std::unordered_set<int>();
+    static std::unordered_set<int> consumed_gamepad_buttons = std::unordered_set<int>();
+    static std::unordered_set<int> consumed_gamepad_axis = std::unordered_set<int>();
+}
+
 struct icfw_input_trigger
 {
     int index = 0;
@@ -460,16 +498,14 @@ struct icfw_input_trigger
     {
         return {false, 0.0f};
     }
+    virtual void Consume()
+    {
+        return;
+    }
 };
 struct icfw_keyboard_trigger : icfw_input_trigger
 {
-    const icfw_keyboard_trigger KEYBOARD_TRIGGER(KeyboardKey key, float multiplier = 1.0f)
-    {
-        auto a = icfw_keyboard_trigger();
-        a.index = key;
-        a.multiplier = multiplier;
-        return a;
-    }
+    
     std::tuple<bool, float> GetValue()
     {
         if(!engine::consumed_keyboard_buttons.contains(index))
@@ -481,16 +517,21 @@ struct icfw_keyboard_trigger : icfw_input_trigger
             return {true, 0.0f};
         }
     }
+    void Consume()
+    {
+        engine::consumed_keyboard_buttons.insert(index);
+    }
 };
+static std::shared_ptr<icfw_input_trigger> KEYBOARD_TRIGGER(KeyboardKey key, float multiplier = 1.0f)
+{
+    auto a = std::make_shared<icfw_keyboard_trigger>();
+    a.get()->index = key;
+    a.get()->multiplier = multiplier;
+    return a;
+}
 struct icfw_mouse_trigger : icfw_input_trigger
 {
-    const icfw_mouse_trigger MOUSE_TRIGGER(icfw_mouse_inputs mouse_input, float multiplier = 1.0f)
-    {
-        auto a = icfw_mouse_trigger();
-        a.index = mouse_input;
-        a.multiplier = multiplier;
-        return a;
-    }
+    
     std::tuple<bool, float> GetValue()
     {
         if(index < 8)
@@ -517,16 +558,28 @@ struct icfw_mouse_trigger : icfw_input_trigger
         }
         return {false, 0.0f};
     }
+    void Consume()
+    {
+        if(index < 8)
+        {
+            engine::consumed_mouse_buttons.insert(engine::mouse_mapping[index]);
+        }
+        else
+        {
+            engine::consumed_mouse_axis.insert(index);
+        }
+    }
 };
+static std::shared_ptr<icfw_input_trigger> MOUSE_TRIGGER(icfw_mouse_inputs mouse_input, float multiplier = 1.0f)
+{
+    auto a = std::make_shared<icfw_mouse_trigger>();
+    a.get()->index = mouse_input;
+    a.get()->multiplier = multiplier;
+    return a;
+}
 struct icfw_gamepad_trigger : icfw_input_trigger
 {
-    const icfw_gamepad_trigger GAMEPAD_TRIGGER(icfw_gamepad_inputs gamepad_input, float multiplier = 1.0f)
-    {
-        auto a = icfw_gamepad_trigger();
-        a.index = gamepad_input;
-        a.multiplier = multiplier;
-        return a;
-    }
+    
     std::tuple<bool, float> GetValue()
     {
         if(!IsGamepadAvailable(0))
@@ -556,49 +609,54 @@ struct icfw_gamepad_trigger : icfw_input_trigger
             }
         }
     }
+    void Consume()
+    {
+        if(index < 19)
+        {
+            engine::consumed_gamepad_buttons.insert(engine::gamepad_mapping[index]);
+        }
+        else
+        {
+            engine::consumed_gamepad_axis.insert(engine::gamepad_mapping[index]);
+        }
+    }
 };
+static std::shared_ptr<icfw_input_trigger> GAMEPAD_TRIGGER(icfw_gamepad_inputs gamepad_input, float multiplier = 1.0f)
+{
+    auto a = std::make_shared<icfw_gamepad_trigger>();
+    a.get()->index = gamepad_input;
+    a.get()->multiplier = multiplier;
+    return a;
+}
 
 struct icfw_input_action
 {
     icfw_input_value_type value_type = digital;
     std::variant<icfw_digital_action_state, bool> last_state = false;
-    std::vector<icfw_input_trigger> triggers;
-    std::variant<std::function<bool (icfw_digital_action_state)>, std::function<bool (float)>> callback;
+    std::vector<std::shared_ptr<icfw_input_trigger>> triggers;
+    std::variant<std::function<bool (icfw_digital_action_state, bool)>, std::function<bool (float)>> callback;
 };
+static icfw_input_action INPUT_ACTION(icfw_input_value_type value_type, std::vector<std::shared_ptr<icfw_input_trigger>> triggers, std::variant<std::function<bool (icfw_digital_action_state, bool)>, std::function<bool (float)>> callback)
+{
+    auto a = icfw_input_action();
+    a.value_type = value_type;
+    if(value_type = digital)
+    {
+        a.last_state = up;
+    }
+    a.triggers = triggers;
+    a.callback = callback;
+    return a;
+}
 struct icfw_input_mapping
 {
     std::vector<icfw_input_action> actions;
 };
-
-struct icfw_input_state
+static icfw_input_mapping INPUT_MAPPING(std::vector<icfw_input_action> actions)
 {
-    std::unordered_map<int, bool> keyboard_buttons;
-    std::unordered_map<int, bool> mouse_buttons;
-    std::unordered_map<int, float> mouse_axis;
-    std::unordered_map<int, bool> gamepad_buttons;
-    std::unordered_map<int, float> gamepad_axis;
-};
-
-namespace engine {
-    static std::vector<icfw_input_mapping> input_mappings;
-    static std::map<std::string, int> input_mapping_names;
-    static std::string current_input_mapping = "";
-
-    // These are updated any time input mapping is changed
-    static std::vector<int> keyboard_buttons_to_gather;
-    static std::vector<int> mouse_buttons_to_gather;
-    static std::vector<int> mouse_axis_to_gather;
-    static std::vector<int> gamepad_buttons_to_gather;
-    static std::vector<int> gamepad_axis_to_gather;
-
-    // These are updated each frame
-    static icfw_input_state current_state;
-
-    static std::unordered_set<int> consumed_keyboard_buttons;
-    static std::unordered_set<int> consumed_mouse_buttons;
-    static std::unordered_set<int> consumed_mouse_axis;
-    static std::unordered_set<int> consumed_gamepad_buttons;
-    static std::unordered_set<int> consumed_gamepad_axis;
+    auto a = icfw_input_mapping();
+    a.actions = actions;
+    return a;
 }
 
 void AddMapping(icfw_input_mapping mapping, std::string name="")
@@ -615,6 +673,10 @@ void AddMapping(icfw_input_mapping mapping, std::string name="")
         target_index = itr->second; // If mapping with the same name already exists update that
     }
 
+    if (target_index >= engine::input_mappings.size())
+    {
+        engine::input_mappings.resize(target_index + 1);
+    }
     engine::input_mappings[target_index] = mapping;
     engine::input_mapping_names[target_name] = target_index;
 }
@@ -641,7 +703,6 @@ void LoadMapping(std::string name)
     engine::gamepad_axis_to_gather.clear();
 
     engine::current_state = icfw_input_state();
-    engine::last_state = icfw_input_state();
 
     if(name == "")  {   return;   }
 
@@ -650,13 +711,13 @@ void LoadMapping(std::string name)
     for (size_t i = 0; i < loaded_mapping.actions.size(); i++) // Loop through all actions and their triggers and add them to the gather lists
     {
         auto a = loaded_mapping.actions[(int)i];
-        for (size_t j = 0; j < a.triggers.size(); j++)
+        for (const auto& trigger : a.triggers)
         {
-            if(auto* c = dynamic_cast<icfw_keyboard_trigger*>(&a.triggers[j]))
+            if(auto c = dynamic_cast<icfw_keyboard_trigger*>(trigger.get()))
             {
                 engine::keyboard_buttons_to_gather.push_back(c->index);
             }
-            if(auto* c = dynamic_cast<icfw_mouse_trigger*>(&a.triggers[j]))
+            if(auto c = dynamic_cast<icfw_mouse_trigger*>(trigger.get()))
             {
                 if(c->index < 8)
                 {
@@ -667,7 +728,7 @@ void LoadMapping(std::string name)
                     engine::mouse_axis_to_gather.push_back(c->index);
                 }
             }
-            if(auto* c = dynamic_cast<icfw_gamepad_trigger*>(&a.triggers[j]))
+            if(auto c = dynamic_cast<icfw_gamepad_trigger*>(trigger.get()))
             {
                 if(c->index < 19)
                 {
@@ -692,6 +753,12 @@ void LoadMapping(std::string name)
 void GatherInputs()
 {
     engine::current_state = icfw_input_state();
+
+    engine::consumed_keyboard_buttons.clear();
+    engine::consumed_mouse_buttons.clear();
+    engine::consumed_mouse_axis.clear();
+    engine::consumed_gamepad_buttons.clear();
+    engine::consumed_gamepad_axis.clear();
 
     for (int i = 0; i < (int)engine::keyboard_buttons_to_gather.size(); i++)
     {
@@ -749,11 +816,97 @@ void UpdateActions()
     {
         auto& action = current_mapping.actions[i];
         
-        for (int j = 0; j < action.triggers.size(); j++)
+        float evaluation = 0.0f;
+
+        for (int j = 0; j < (int)action.triggers.size(); j++)
         {
-            auto& trigger = action.triggers[j];
+            auto trigger = action.triggers[j];
+            auto val = trigger.get()->GetValue();
+
+            if(!std::get<0>(val))
+            {
+                evaluation += std::get<1>(val);
+            }
         }
         
+        if(action.value_type == digital)
+        {
+            bool call_callback = false;
+            icfw_digital_action_state old_state = std::get<icfw_digital_action_state>(action.last_state);
+            icfw_digital_action_state new_state = up;
+            switch (old_state)
+            {
+            case press_started:
+                call_callback = true;
+                if(evaluation > 0.0f)
+                {
+                    new_state = held_down;
+                }
+                else
+                {
+                    new_state = press_finished;
+                }
+                break;
+            case held_down:
+                call_callback = true;
+                if(evaluation > 0.0f)
+                {
+                    new_state = held_down;
+                }
+                else
+                {
+                    new_state = press_finished;
+                }
+                break;
+            case press_finished:
+                call_callback = true;
+                if(evaluation > 0.0f)
+                {
+                    new_state = press_started;
+                }
+                else
+                {
+                    new_state = up;
+                }
+                break;
+            case up:
+                call_callback = true;
+                if(evaluation > 0.0f)
+                {
+                    new_state = press_started;
+                }
+                else
+                {
+                    new_state = up;
+                }
+            default:
+                break;
+            }
+            if(call_callback)
+            {
+                if(std::get<std::function<bool (icfw_digital_action_state, bool)>>(action.callback)(new_state, new_state != old_state)) // Send the value to the callback
+                {
+                    for (int j = 0; j < (int)action.triggers.size(); j++) // Consume all triggers if callback returns true
+                    {
+                        auto trigger = action.triggers[j];
+                        trigger.get()->Consume();
+                    }
+                }
+            }
+            
+            action.last_state = new_state;
+        }
+        else
+        {
+            if(std::get<std::function<bool (float)>>(action.callback)(evaluation)) // Send the value to the callback
+                {
+                    for (int j = 0; j < (int)action.triggers.size(); j++) // Consume all triggers if callback returns true
+                    {
+                        auto& trigger = action.triggers[j];
+                        trigger.get()->Consume();
+                    }
+                }
+        }
     }
     
 }
