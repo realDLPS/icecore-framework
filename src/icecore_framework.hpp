@@ -56,15 +56,13 @@ namespace engine {
 
 #endif
 
-void GatherInputs();
-void UpdateActions();
+void InputTick();
 
 namespace engine {
 void internal_tick(float delta_time)
 {
     #if defined(ICFW_INPUT)
-    GatherInputs();
-    UpdateActions();
+    InputTick();
     #endif
 }
 }
@@ -468,8 +466,7 @@ struct icfw_input_state
 };
 
 namespace engine {
-    static std::vector<icfw_input_mapping> input_mappings = std::vector<icfw_input_mapping>();
-    static std::map<std::string, int> input_mapping_names = std::map<std::string, int>();
+    static std::map<std::string, icfw_input_mapping> input_mappings = std::map<std::string, icfw_input_mapping>();
     static std::string current_input_mapping = "";
 
     // These are updated any time input mapping is changed
@@ -661,24 +658,13 @@ static icfw_input_mapping INPUT_MAPPING(std::vector<icfw_input_action> actions)
 
 void AddMapping(icfw_input_mapping mapping, std::string name="")
 {
-    int target_index = (int)engine::input_mappings.size();
     std::string target_name = name;
     if(target_name=="")
     {
-        target_name = std::to_string(target_index); // If no name is provided use the index the mapping will be assigned as the name
-    }
-    auto itr = engine::input_mapping_names.find(name);
-    if(itr != engine::input_mapping_names.end())
-    {
-        target_index = itr->second; // If mapping with the same name already exists update that
+        target_name = std::to_string(engine::input_mappings.size()); // If no name is provided use the index the mapping will be assigned as the name
     }
 
-    if (target_index >= engine::input_mappings.size())
-    {
-        engine::input_mappings.resize(target_index + 1);
-    }
-    engine::input_mappings[target_index] = mapping;
-    engine::input_mapping_names[target_name] = target_index;
+    engine::input_mappings[target_name] = mapping;
 }
 
 namespace engine {
@@ -704,9 +690,9 @@ void LoadMapping(std::string name)
 
     engine::current_state = icfw_input_state();
 
-    if(name == "")  {   return;   }
+    if(name == "" || !engine::input_mappings.contains(name))  {   return;   }
 
-    icfw_input_mapping loaded_mapping = engine::input_mappings[engine::input_mapping_names[name]];
+    icfw_input_mapping loaded_mapping = engine::input_mappings[name];
 
     for (size_t i = 0; i < loaded_mapping.actions.size(); i++) // Loop through all actions and their triggers and add them to the gather lists
     {
@@ -810,17 +796,15 @@ void GatherInputs()
 }
 void UpdateActions()
 {
-    icfw_input_mapping current_mapping = engine::input_mappings[engine::input_mapping_names[engine::current_input_mapping]];
+    if(engine::current_input_mapping == "") {   return;   }
+    icfw_input_mapping current_mapping = engine::input_mappings[engine::current_input_mapping];
 
-    for (int i = 0; i < (int)current_mapping.actions.size(); i++)
+    for (auto& action : current_mapping.actions)
     {
-        auto& action = current_mapping.actions[i];
-        
         float evaluation = 0.0f;
 
-        for (int j = 0; j < (int)action.triggers.size(); j++)
+        for (const auto& trigger : action.triggers)
         {
-            auto trigger = action.triggers[j];
             auto val = trigger.get()->GetValue();
 
             if(!std::get<0>(val))
@@ -899,16 +883,26 @@ void UpdateActions()
         else
         {
             if(std::get<std::function<bool (float)>>(action.callback)(evaluation)) // Send the value to the callback
+            {
+                for (const auto& trigger : action.triggers) // Consume all triggers if callback returns true
                 {
-                    for (int j = 0; j < (int)action.triggers.size(); j++) // Consume all triggers if callback returns true
-                    {
-                        auto& trigger = action.triggers[j];
-                        trigger.get()->Consume();
-                    }
+                    trigger.get()->Consume();
                 }
+            }
         }
     }
     
+}
+#if defined(ICFW_UI)
+void UpdateUIInput()
+{
+    
+}
+#endif
+void InputTick()
+{
+    GatherInputs();
+    UpdateActions();
 }
 
 #endif

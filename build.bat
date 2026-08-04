@@ -57,6 +57,12 @@ GOTO :build
 :buildWinDebug
 SET BuildWindows=0
 echo Building Windows Debug, this might take a while!
+for /f "tokens=1,2 delims==" %%A in (project.ini) do (
+    if /i "%%A"=="project-name" (
+        set "PROJECT_NAME=%%B"
+    )
+)
+powershell -NoProfile -Command "$c=Get-Content '.vscode\launch.template.json' -Raw;" "$c=$c -replace '__PROJECT_NAME__','%PROJECT_NAME%';" "Set-Content '.vscode\launch.json' $c"
 IF %Clean%==1 rd /s /q build\win\debug\
 cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -S %cd% -B %cd%\build\win\debug -G Ninja
 cmake --build build\win\debug

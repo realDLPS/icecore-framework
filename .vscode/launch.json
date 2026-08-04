@@ -2,13 +2,24 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch with GDB",
+      "name": "Win Debug",
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/build/win/debug/icecoreframework.exe",
       "cwd": "${workspaceFolder}/build/win/debug",
       "MIMode": "gdb",
-      "miDebuggerPath": "gdb.exe"
+      "miDebuggerPath": "gdb.exe",
+      "preLaunchTask": "Build-Win-Debug"
+    },
+    {
+      "name": "Win Clean Debug",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/win/debug/icecoreframework.exe",
+      "cwd": "${workspaceFolder}/build/win/debug",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb.exe",
+      "preLaunchTask": "Build-Win-Debug-Clean"
     }
   ]
 }

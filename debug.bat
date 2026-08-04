@@ -30,17 +30,12 @@ for /f "tokens=1,2 delims==" %%A in (project.ini) do (
     )
 )
 
-powershell -NoProfile -Command "$c=Get-Content '.vscode\launch.template.json' -Raw;" "$c=$c -replace '__PROJECT_NAME__','%PROJECT_NAME%';" "Set-Content '.vscode\launch.json' $c"
-
 IF %debugWindows%==1 GOTO debugWinBuild
 IF %debugWeb%==1 GOTO debugWebBuild
 
 
 :debugWinBuild
-SET workdir=%cd%
-cd %cd%\build\win\debug\
-::gdbserver localhost:1234 %PROJECT_NAME%.exe
-cd %workdir%
+echo Please start debugging inside vscode by pressing F5
 GOTO end
 
 :debugWebBuild
