@@ -4,19 +4,18 @@
 #include <array>
 #include <vector>
 #include <span>
-#include <openssl/sha.h>
-#include <openssl/evp.h>
+#include <map>
 
-#include "icfw_hashing.hpp"
+#include "icpak_openssl.hpp"
 
 #define BLOCK_SIZE 1048576 // 1 MiB, will later be read from a config file.
 
 struct icpak_asset_header
 {
-    std::uint8_t asset_type = 0;
+    std::uint8_t asset_type;
 
-    std::uint8_t compression_type = 0;
-    std::uint8_t asset_flags = 0; // Following flags are available 
+    std::uint8_t compression_type;
+    std::uint8_t asset_flags; // Following flags are available 
     /*
     0: compressed 
     1: reserved
@@ -27,18 +26,54 @@ struct icpak_asset_header
     6: reserved
     7: reserved
     */
-    std::int32_t offset = 0; // Byte offset inside the block the asset is stored in
+    std::int32_t block; // Which block the asset is in
+    std::int32_t offset; // Byte offset inside the block the asset is stored in
     
-    std::int32_t compressed_size = 0; // Byte size of the asset when compressed
-    std::int32_t size = 0; // Byte size of the asset after decompression
-
-    std::array<std::uint8_t, 32> compressed_hash;
-    std::array<std::uint8_t, 32> uncompressed_hash;
+    std::int32_t compressed_size; // Byte size of the asset when compressed
+    std::int32_t size; // Byte size of the asset after decompression
+    
+    sha256_hash compressed_hash;
+    sha256_hash uncompressed_hash;
 };
+
+struct icpak_index
+{
+    std::int32_t block_count;
+    std::vector<std::int32_t> block_sizes;
+    std::vector<sha256_hash> block_hashes;
+    std::map<icpak_uuid, icpak_asset_header> asset_map;
+
+    // Calculates the offset to a block inside an icpak.
+    bool CalculateBlockOffset(std::int32_t block, std::int32_t &result)
+    {
+        if(block > block_count) {   return false;   }
+
+        std::int32_t offset = 0;
+
+        for(int i = 0; i < block; i++)
+        {
+            offset += block_sizes[i] * BLOCK_SIZE;
+        }
+
+        result = offset;
+        return true;
+    }
+};
+
+struct icpak_toc
+{
+    
+};
+
 
 struct icpak_block
 {
     std::vector<std::array<std::uint8_t, BLOCK_SIZE>> bytes;
+};
+
+struct icpak
+{
+    std::vector<icpak_block> blocks;
 };
 
 struct icpak_asset
