@@ -378,8 +378,6 @@ void DrawQueue(icfw_draw_queue &draw_queue, icfw_camera &camera, RenderTexture2D
 #include <algorithm>
 #include <unordered_map>
 
-#include <iostream>
-
 enum icfw_input_mode
 {
     disabled = 1,
@@ -896,7 +894,7 @@ void UpdateActions()
 #if defined(ICFW_UI)
 void UpdateUIInput()
 {
-    
+
 }
 #endif
 void InputTick()
@@ -906,4 +904,20 @@ void InputTick()
 }
 
 #endif
+#pragma endregion
+
+
+
+
+
+#pragma region ICFW_ASSET_MANAGER
+#if defined(ICFW_ASSET_MANAGER)
+#endif
+#pragma endregion
+
+
+
+
+
+#pragma region ICFW_UI
 #pragma endregion
