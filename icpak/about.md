@@ -17,6 +17,7 @@ This is very much a work in progress file about my thoughts on how to do a syste
     - ICPAK index version
     - Asset format version
     - Asset header version
+    - How large is the block multiple (ie 1 MiB, 512 kiB etc)
 - The binary holds the hash for the TOC that it is expecting
 - Worth noting is that the user decides which icpak an asset gets put into.
 
