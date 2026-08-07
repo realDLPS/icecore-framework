@@ -5,6 +5,7 @@
 #include <vector>
 #include <span>
 #include <map>
+#include <string>
 
 #include "icpak_openssl.hpp"
 
@@ -44,7 +45,7 @@ struct icpak_index
     std::map<icpak_uuid, icpak_asset_header> asset_map;
 
     // Calculates the offset to a block inside an icpak.
-    bool CalculateBlockOffset(std::int32_t block, std::int32_t &result)
+    bool CalculateBlockOffset(std::int32_t block, std::int32_t block_size = BLOCK_SIZE, std::int32_t &result)
     {
         if(block > block_count) {   return false;   }
 
@@ -52,7 +53,7 @@ struct icpak_index
 
         for(int i = 0; i < block; i++)
         {
-            offset += block_sizes[i] * BLOCK_SIZE;
+            offset += block_sizes[i] * block_size;
         }
 
         result = offset;
@@ -62,7 +63,16 @@ struct icpak_index
 
 struct icpak_toc
 {
-    
+    std::map<icpak_uuid, std::string> asset_to_pak_map; // Contains information on which pak file contains the asset
+    std::map<std::string, sha256_hash> icpak_index_hashes;
+
+    std::int32_t toc_version;
+    std::int32_t icpak_version;
+    std::int32_t icpak_index_version;
+    std::int32_t icpak_asset_version;
+    std::int32_t icpak_asset_header_version;
+
+    std::int32_t block_size;
 };
 
 
