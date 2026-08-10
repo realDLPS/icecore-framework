@@ -29,7 +29,7 @@ This is very much a work in progress file about my thoughts on how to do a syste
     - Block sizes (How many MiB a block is)
     - Block hashes (To identify if the block is still intact and hasn't been corrupted or modified)
     - Map of assets
-        - Key: Asset UUID (This is used to identify an asset even through name and content changes, and is generated once upon asset creation)
+        - Key: Asset UUID (This is used to identify an asset even through name and content changes, and is generated once upon asset creation, just 128 random bits)
         - Content:
             - Asset header
             - Block location (index of the block the asset is in)
@@ -140,9 +140,13 @@ icpak/
         debug-asset-1.icast
     depot/
         blocks/
-        blocks-staging/
+        staging/
+            blocks/
+            paks/
         manifest.icman
     depot-debug/
         blocks/
-        blocks-staging/
+        staging/
+            blocks/
+            paks/
         manifest.icman
