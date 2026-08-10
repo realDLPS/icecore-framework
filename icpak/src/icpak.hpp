@@ -40,20 +40,20 @@ struct icpak_asset_header
 struct icpak_index
 {
     std::int32_t block_count;
-    std::vector<std::int32_t> block_sizes;
+    std::vector<std::int32_t> block_sizes; // A multiplier of BLOCK_SIZE
     std::vector<sha256_hash> block_hashes;
     std::map<icpak_uuid, icpak_asset_header> asset_map;
 
     // Calculates the offset to a block inside an icpak.
-    bool CalculateBlockOffset(std::int32_t block, std::int32_t block_size = BLOCK_SIZE, std::int32_t &result)
+    bool CalculateBlockOffset(std::int32_t block, std::int64_t &result, std::int32_t block_size = BLOCK_SIZE)
     {
         if(block > block_count) {   return false;   }
 
-        std::int32_t offset = 0;
+        std::int64_t offset = 0;
 
         for(int i = 0; i < block; i++)
         {
-            offset += block_sizes[i] * block_size;
+            offset += (std::int64_t)(block_sizes[i] * block_size);
         }
 
         result = offset;
@@ -81,7 +81,7 @@ struct icpak_block
     std::vector<std::array<std::uint8_t, BLOCK_SIZE>> bytes;
 };
 
-struct icpak
+struct icpak_file
 {
     std::vector<icpak_block> blocks;
 };

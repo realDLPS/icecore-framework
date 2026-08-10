@@ -62,7 +62,7 @@ This is very much a work in progress file about my thoughts on how to do a syste
     - Content
         - ICPAKs that contain Assets
 - Each file type also starts with a magic number to identify it
-    - Number are to be defined.
+    - Numbers are to be defined.
 
 # .icast
 - TBD, but is a development time format that holds more information less efficiently than the packed formats used at runtime after packing
@@ -125,3 +125,24 @@ This is very much a work in progress file about my thoughts on how to do a syste
 ## Block-buddy
 - Holds a list of uuids beloging in the same block
 - Upon each packing the packer checks how many of the assets in the block are still alive and if the block should be purged.
+
+
+# File structure
+
+content/
+    player.png
+    jump.wav
+icpak/
+    assets/
+        asset-1.icast
+        asset-d.icast
+    assets-debug/
+        debug-asset-1.icast
+    depot/
+        blocks/
+        blocks-staging/
+        manifest.icman
+    depot-debug/
+        blocks/
+        blocks-staging/
+        manifest.icman
