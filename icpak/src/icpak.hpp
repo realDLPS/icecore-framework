@@ -11,14 +11,19 @@
 
 #define BLOCK_SIZE 1048576 // 1 MiB, will later be read from a config file.
 
+enum icpak_compression_type
+{
+    UNCOMPRESSED = 0
+};
+
 struct icpak_asset_header
 {
     std::uint8_t asset_type;
 
-    std::uint8_t compression_type;
+    icpak_compression_type compression_type;
     std::uint8_t asset_flags; // Following flags are available 
     /*
-    0: compressed 
+    0: reserved 
     1: reserved
     2: reserved
     3: reserved

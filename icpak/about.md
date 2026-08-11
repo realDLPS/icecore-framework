@@ -140,12 +140,14 @@ icpak/
         debug-asset-1.icast
     depot/
         blocks/
+        paks/
         staging/
             blocks/
             paks/
         manifest.icman
     depot-debug/
         blocks/
+        paks/
         staging/
             blocks/
             paks/
