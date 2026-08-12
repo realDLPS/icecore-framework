@@ -83,12 +83,12 @@ bool U32Write(std::uint32_t u32, FILE *file)
 bool U32Read(std::uint32_t &u32, FILE* file)
 {
     std::array<std::uint8_t, 4> buf;
-    if(!ValidatedByteRead(buf.data(), sizeof(std::uint32_t), file));
+    if(!ValidatedByteRead(buf.data(), sizeof(std::uint32_t), file))
     {
         return false;
     }
     u32 = FromByte(buf);
-    return true
+    return true;
 }
 
 // Tries to write a U32 and on fail closes file and returns false
