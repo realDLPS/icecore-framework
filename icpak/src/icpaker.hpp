@@ -24,14 +24,20 @@ static paker_ctx ctx;
 
 struct depot_manifest
 {
+    // Asset uuids mapped to asset hashes
     std::map<icpak_uuid, sha256_hash> asset_hashes;
+    // Asset uuids mapped to asset block location
     std::map<icpak_uuid, std::uint32_t>asset_locations;
+    // Vector of blocks containing vector of assets containing asset uuids and asset compressed sizes.
     std::vector<std::vector<std::tuple<icpak_uuid, std::uint32_t>>> block_contents;
+    // Vector of paks containing vector of blocks.
+    std::map<std::string, std::vector<std::uint32_t>> pak_contents;
 };
 
 struct ic_asset
 {
     icpak_uuid uuid;
+    std::uint8_t asset_type;
     std::string path;
     icpak_compression_type compression_type;
 };
@@ -69,6 +75,28 @@ bool ValidatedByteRead(void *dst_buffer, size_t byte_count, FILE *file)
 
     return result == byte_count;
 }
+bool U32Write(std::uint32_t u32, FILE *file)
+{
+    auto bytes = ToByte(u32);
+    return ValidatedByteWrite(bytes.data(), sizeof(std::uint32_t), file);
+}
+bool U32Read(std::uint32_t &u32, FILE* file)
+{
+    std::array<std::uint8_t, 4> buf;
+    if(!ValidatedByteRead(buf.data(), sizeof(std::uint32_t), file));
+    {
+        return false;
+    }
+    u32 = FromByte(buf);
+    return true
+}
+
+// Tries to write a U32 and on fail closes file and returns false
+#define U32WriteWithFail(u32, file) if(!U32Write(u32, file)){fclose(file);return false;}
+// Tries to read a U32 and on fail closes file and returns false
+// Creates variable with the name defined for u32.
+#define U32ReadWithFail(u32, file) std::uint32_t u32; if(!U32Read(u32, file)){fclose(file);return false;}
+
 
 bool WriteDepotManifest(depot_manifest manifest)
 {
@@ -79,11 +107,7 @@ bool WriteDepotManifest(depot_manifest manifest)
     ////////// Asset uuids, hashes & locations
 
     // Write how many assets are in the manifest
-    if(!ValidatedByteWrite(ToByte(manifest.asset_hashes.size()).data(), sizeof(uint32_t), icmanfile))
-    {
-        fclose(icmanfile);
-        return false;
-    }
+    U32WriteWithFail(manifest.asset_hashes.size(), icmanfile)
     for(const auto& [uuid, hash] : manifest.asset_hashes) // Write asset data
     {
         std::uint8_t buf[sizeof(icpak_uuid)+sizeof(sha256_hash)+sizeof(std::uint32_t)];
@@ -103,11 +127,7 @@ bool WriteDepotManifest(depot_manifest manifest)
     ////////// Block contents
 
     // Write how many blocks are in the manifest
-    if(!ValidatedByteWrite(ToByte(manifest.block_contents.size()).data(), sizeof(uint32_t), icmanfile))
-    {
-        fclose(icmanfile);
-        return false;
-    }
+    U32WriteWithFail(manifest.block_contents.size(), icmanfile)
     for(std::uint32_t i; i < manifest.block_contents.size(); ++i) // Write block data
     {
         const auto &assets = manifest.block_contents[i];
@@ -140,6 +160,45 @@ bool WriteDepotManifest(depot_manifest manifest)
         free(buf);
     }
 
+    ////////// Pak contents
+    U32WriteWithFail(manifest.pak_contents.size(), icmanfile)
+    for(const auto& [pak_name, blocks] : manifest.pak_contents)
+    {   
+        std::uint32_t pak_name_byte_size = pak_name.size() * sizeof(std::string::value_type); // Size requirement of the pak name 
+        std::uint32_t block_count = blocks.size();
+        std::uint32_t buf_size = 0;
+        buf_size += sizeof(uint32_t) + pak_name_byte_size;
+        buf_size += block_count * sizeof(uint32_t);
+
+        std::uint8_t *buf = (std::uint8_t*)malloc(buf_size);
+        std::uint32_t buf_offset = 0;
+
+        auto pak_name_byte_size_bytes = ToByte(pak_name_byte_size);
+        std::copy(pak_name_byte_size_bytes.begin(), pak_name_byte_size_bytes.end(), buf); // Write how much space the pak name takes
+        buf_offset += sizeof(pak_name_byte_size);
+
+        std::copy(pak_name.begin(), pak_name.end(), buf + buf_offset); // Write pak name to the buffer
+        buf_offset += pak_name_byte_size;
+
+        auto block_count_bytes = ToByte(block_count);
+        std::copy(block_count_bytes.begin(), block_count_bytes.end(), buf + buf_offset); // Copy how many assets in the block
+        buf_offset += sizeof(block_count);
+
+        for(auto& block : blocks)
+        {
+            auto block_bytes = ToByte(block);
+            std::copy(block_bytes.begin(), block_bytes.end(), buf + buf_offset);
+            buf_offset += sizeof(block);
+        }
+
+        if(!ValidatedByteWrite(buf, buf_size, icmanfile))
+        {
+            fclose(icmanfile);
+            return false;
+        }
+        free(buf);
+    }
+
     fclose(icmanfile);
 
     std::string file_name = std::string(ctx.debug_mode ? "depot-debug" : "depot") + "/manifest.icman";
@@ -161,19 +220,11 @@ bool ReadDepotManifest(depot_manifest &manifest)
     if(!icmanfile) return false;
 
     ////////// Assets
-    std::array<uint8_t, 4> asset_count_buf;
-    if(!ValidatedByteRead(asset_count_buf.data(), sizeof(uint32_t), icmanfile))
-    {
-        fclose(icmanfile);
-        return false;
-    }
-    auto asset_count = FromByte(asset_count_buf);
-    
+    U32ReadWithFail(asset_count, icmanfile)
     for(std::uint32_t i = 0; i < asset_count; ++i)
     {
         icpak_uuid uuid;
         sha256_hash hash;
-        std::array<std::uint8_t, 4> location_bytes;
 
         // Read uuid
         if(!ValidatedByteRead(uuid.data(), sizeof(icpak_uuid), icmanfile))
@@ -190,37 +241,19 @@ bool ReadDepotManifest(depot_manifest &manifest)
         }
 
         // Read asset location
-        if(!ValidatedByteRead(location_bytes.data(), location_bytes.size(), icmanfile))
-        {
-            fclose(icmanfile);
-            return false;
-        }
-
-        std::uint32_t location = FromByte(location_bytes);
+        U32ReadWithFail(location, icmanfile)
 
         new_manifest.asset_hashes.emplace(uuid, hash);
         new_manifest.asset_locations.emplace(uuid, location);
     }
 
     ////////// Blocks
-    std::array<uint8_t, 4> block_count_buf;
-    if(!ValidatedByteRead(block_count_buf.data(), sizeof(uint32_t), icmanfile))
-    {
-        fclose(icmanfile);
-        return false;
-    }
-    auto block_count = FromByte(block_count_buf);
+    U32ReadWithFail(block_count, icmanfile)
 
     for(std::uint32_t i = 0; i < block_count; ++i)
     {
         // Number of assets in this block
-        std::array<uint8_t, 4> block_asset_count_bytes;
-        if(!ValidatedByteRead(block_asset_count_bytes.data(), sizeof(std::uint32_t), icmanfile))
-        {
-            fclose(icmanfile);
-            return false;
-        }
-        std::uint32_t block_asset_count = FromByte(block_asset_count_bytes);
+        U32ReadWithFail(block_asset_count, icmanfile)
 
         auto& assets = new_manifest.block_contents[i];
         assets.reserve(block_asset_count);
@@ -228,7 +261,6 @@ bool ReadDepotManifest(depot_manifest &manifest)
         for(std::uint32_t j = 0; j < block_asset_count; ++j)
         {
             icpak_uuid uuid;
-            std::array<std::uint8_t, 4> size_bytes;
 
             if(!ValidatedByteRead(uuid.data(), sizeof(icpak_uuid), icmanfile))
             {
@@ -236,20 +268,43 @@ bool ReadDepotManifest(depot_manifest &manifest)
                 return false;
             }
 
-            if(!ValidatedByteRead(size_bytes.data(), sizeof(std::uint32_t), icmanfile))
-            {
-                fclose(icmanfile);
-                return false;
-            }
-            std::uint32_t asset_size = FromByte(size_bytes);
+            U32ReadWithFail(asset_size, icmanfile)
 
             assets.emplace_back(uuid, asset_size);
         }
     }
 
+    ////////// Pak contents
+    U32ReadWithFail(pak_count, icmanfile) // Read how many paks exist
+
+    for(std::uint32_t i = 0; i < pak_count; ++i)
+    {
+        U32ReadWithFail(pak_name_size, icmanfile) // Read size of pak name
+
+        std::string pak_name;
+        if(!ValidatedByteRead(pak_name.data(), pak_name_size, icmanfile)) // Read pak name
+        {
+            fclose(icmanfile);
+            return false;
+        }
+
+        U32ReadWithFail(block_count, icmanfile) // Read number of blocks in pak
+
+        std::vector<std::uint32_t> blocks(block_count);
+
+        for(std::uint32_t j = 0; j < block_count; ++j)
+        {
+            U32ReadWithFail(block, icmanfile) // Read block
+            blocks[j] = block;
+        }
+
+        new_manifest.pak_contents[pak_name] = blocks;
+    }
+
     fclose(icmanfile);
 
     manifest = new_manifest;
+    return true;
 }
 
 bool WritePak(std::string name, std::vector<int> blocks)

@@ -19,7 +19,6 @@ enum icpak_compression_type
 struct icpak_asset_header
 {
     std::uint8_t asset_type;
-
     icpak_compression_type compression_type;
     std::uint8_t asset_flags; // Following flags are available 
     /*
