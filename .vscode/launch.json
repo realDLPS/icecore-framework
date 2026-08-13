@@ -20,6 +20,16 @@
       "MIMode": "gdb",
       "miDebuggerPath": "gdb.exe",
       "preLaunchTask": "Build-Win-Debug-Clean"
+    },
+    {
+      "name": "ICPAK Debug",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/icpak/build/debug/ICPAK.exe",
+      "cwd": "${workspaceFolder}/icpak",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb.exe",
+      "preLaunchTask": "Build-ICPAK-Debug"
     }
   ]
 }

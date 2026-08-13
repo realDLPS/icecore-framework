@@ -24,6 +24,18 @@
         }
       },
       "problemMatcher": []
+    },
+    {
+      "label": "Build-ICPAK-Debug",
+      "type": "shell",
+      "command": "cd icpak && build debug && cd ..",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
+        }
+      },
+      "problemMatcher": []
     }
   ]
 }

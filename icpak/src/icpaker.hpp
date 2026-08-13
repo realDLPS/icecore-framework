@@ -6,6 +6,7 @@
 #include <tuple>
 #include <algorithm>
 #include <stdexcept>
+#include <cctype>
 
 #define TOC_VERSION 1
 #define ICPAK_VERSION 1
@@ -37,11 +38,13 @@ struct depot_manifest
 struct ic_asset
 {
     icpak_uuid uuid;
+    std::string name;
     std::uint8_t asset_type;
     std::string path;
     icpak_compression_type compression_type;
 };
 
+#pragma region Conversions
 // Big endian
 std::array<std::uint8_t, 4> ToByte(std::uint32_t u32)
 {
@@ -60,7 +63,13 @@ std::uint32_t FromByte(std::array<std::uint8_t, 4> u8)
     ret_val = (((uint32_t)u8[0]) << 24) | (((uint32_t)u8[1]) << 16) | (((uint32_t)u8[2]) << 8) | ((uint32_t)u8[3]);
     return ret_val;
 }
+#pragma endregion
 
+
+
+
+
+#pragma region File IO Helpers
 // Validates that all bytes were written
 bool ValidatedByteWrite(const void* buffer, size_t buffer_count, FILE *file)
 {
@@ -96,9 +105,29 @@ bool U32Read(std::uint32_t &u32, FILE* file)
 // Tries to read a U32 and on fail closes file and returns false
 // Creates variable with the name defined for u32.
 #define U32ReadWithFail(u32, file) std::uint32_t u32; if(!U32Read(u32, file)){fclose(file);return false;}
+#pragma endregion
 
+#pragma region Prompts
+bool PromptYesNo(std::string prompt, bool def_val, bool &ret_val)
+{
+    std::string input;
+    std::string retry_input;
+promptyesno:
+    std::cout << prompt + (def_val ? " [Y/n]: " : " [y/N]: ");
+    std::getline(std::cin, input);
 
-bool WriteDepotManifest(depot_manifest manifest)
+    if(input == "") {ret_val = def_val; return true;}
+    std::transform(input.begin(), input.end(), input.begin(), ::tolower);
+    if(input == "y" || input == "yes") {ret_val = true; return true;}
+    if(input == "n" || input == "no") {ret_val = false; return true;}
+    std::cout << "Invalid input, press enter to retry or type anything to exit: ";
+    std::getline(std::cin, retry_input);
+    if(retry_input == "") {goto promptyesno;}
+    return false;
+}
+#pragma endregion
+
+bool WriteDepotManifest(const depot_manifest &manifest)
 {
     std::string staging_file_name = std::string(ctx.debug_mode ? "depot-debug" : "depot") + "/staging/manifest.icman";
     FILE* icmanfile = fopen64(staging_file_name.c_str(), "wb");
@@ -342,6 +371,34 @@ bool WritePak(std::string name, std::vector<int> blocks)
     return true;
 }
 
+bool WriteAsset(const ic_asset &asset)
+{
+    std::string staging_file_name = std::string(ctx.debug_mode ? "staging/assets-debug/" : "staging/assets/") + asset.name + ".icast";
+    FILE* icastfile = fopen64(staging_file_name.c_str(), "wb");
+    if(!icastfile) return false;
+
+
+
+    std::string file_name = std::string(ctx.debug_mode ? "assets-debug/" : "assets/") + asset.name + ".icpak";
+    if(!std::filesystem::copy_file(staging_file_name, file_name, std::filesystem::copy_options::overwrite_existing))
+    {
+        return false;
+    }
+    return true;
+}
+
+bool CreateAsset(std::string name)
+{
+    ic_asset asset;
+    asset.uuid = icpak::generate_uuid();
+    asset.name = name;
+}
+
+bool ProcessAssets()
+{
+    return false;
+}
+
 int paker()
 {
     bool exit = true;
@@ -350,6 +407,8 @@ int paker()
     {
         std::string command;
     }
+
+    PromptYesNo("Testing", true, exit);
 
     return 0;
 }

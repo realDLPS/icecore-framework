@@ -34,7 +34,7 @@ GOTO end
 SET Build=0
 echo Building Release, this might take a while!
 IF %Clean%==1 rd /s /q build\release\
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -S %cd% -B %cd%\build\release -G Ninja
+cmake -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR=C:/msys64/ucrt64 -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -S %cd% -B %cd%\build\release -G Ninja
 cmake --build build\release
 xcopy /s /y %cd%\build\release\ICPAK.exe %cd%
 echo Finished Building Windows Release
@@ -44,7 +44,7 @@ GOTO :build
 SET Build=0
 echo Building Debug, this might take a while!
 IF %Clean%==1 rd /s /q build\debug\
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -S %cd% -B %cd%\build\debug -G Ninja
+cmake -DCMAKE_BUILD_TYPE=Debug -DOPENSSL_ROOT_DIR=C:/msys64/ucrt64 -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -S %cd% -B %cd%\build\debug -G Ninja
 cmake --build build\debug
 echo Finished Building Debug
 GOTO :build

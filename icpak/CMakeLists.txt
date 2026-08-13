@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.21)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 file(READ "${CMAKE_SOURCE_DIR}/icpak.ini" ICPAK_INI)
-#string(REGEX MATCH "project-name=([^\r\n]+)" _ "${PROJECT_INI}")
 set(APP_TARGET "ICPAK")
 
 project(${APP_TARGET})
@@ -14,6 +13,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported)
+find_package(OpenSSL REQUIRED)
 
 add_executable(${APP_TARGET}
     main.cpp
@@ -37,6 +37,7 @@ target_link_options(${APP_TARGET} PRIVATE
 
 find_program(UPX_EXECUTABLE upx)
 
+
 if(UPX_EXECUTABLE AND WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
     add_custom_command(
         TARGET ${APP_TARGET}
@@ -51,4 +52,4 @@ if(ipo_supported)
     set_property(TARGET ${APP_TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION $<CONFIG:Release>)
 endif()
 
-target_link_libraries(${APP_TARGET})
+target_link_libraries(${APP_TARGET} PRIVATE OpenSSL::Crypto)
