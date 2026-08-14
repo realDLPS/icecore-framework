@@ -11,7 +11,7 @@
 
 #define BLOCK_SIZE 1048576 // 1 MiB, will later be read from a config file.
 
-enum icpak_compression_type
+enum icpak_compression_type : std::uint8_t
 {
     UNCOMPRESSED = 0
 };
