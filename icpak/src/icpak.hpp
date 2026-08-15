@@ -9,16 +9,24 @@
 
 #include "icpak_openssl.hpp"
 
-#define BLOCK_SIZE 1048576 // 1 MiB, will later be read from a config file.
+#ifndef BLOCK_SIZE
+#define BLOCK_SIZE 1048576 // 1 MiB, you may specify another size by defining yourself.
+#endif
 
 enum icpak_compression_type : std::uint8_t
 {
     UNCOMPRESSED = 0
 };
 
+enum icpak_asset_type : std::uint8_t
+{
+    ASSET_TYPE_UNSET = 0,
+    Texture = 1
+};
+
 struct icpak_asset_header
 {
-    std::uint8_t asset_type;
+    icpak_asset_type asset_type;
     icpak_compression_type compression_type;
     std::uint8_t asset_flags; // Following flags are available 
     /*

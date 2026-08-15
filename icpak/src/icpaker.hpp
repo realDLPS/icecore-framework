@@ -39,9 +39,9 @@ struct ic_asset
 {
     icpak_uuid uuid;
     std::string name;
-    std::uint8_t asset_type;
-    std::string path;
-    icpak_compression_type compression_type;
+    icpak_asset_type asset_type = ASSET_TYPE_UNSET;
+    std::string path = "";
+    icpak_compression_type compression_type = UNCOMPRESSED;
 };
 
 #pragma region Conversions
@@ -116,17 +116,44 @@ bool PromptYesNo(std::string prompt, bool def_val, bool &ret_val)
 {
     std::string input;
     std::string retry_input;
-promptyesno:
-    std::cout << prompt + (def_val ? " [Y/n]: " : " [y/N]: ");
-    std::getline(std::cin, input);
+    bool exit = false;
 
-    if(input == "") {ret_val = def_val; return true;}
-    std::transform(input.begin(), input.end(), input.begin(), ::tolower);
-    if(input == "y" || input == "yes") {ret_val = true; return true;}
-    if(input == "n" || input == "no") {ret_val = false; return true;}
-    std::cout << "Invalid input, press enter to retry or type anything to exit: ";
-    std::getline(std::cin, retry_input);
-    if(retry_input == "") {goto promptyesno;}
+    while(!exit)
+    {
+        std::cout << prompt + (def_val ? " [Y/n]: " : " [y/N]: ");
+        std::getline(std::cin, input);
+
+        if(input == "") {ret_val = def_val; return true;}
+        std::transform(input.begin(), input.end(), input.begin(), ::tolower);
+
+        if(input == "y" || input == "yes") {ret_val = true; return true;}
+        if(input == "n" || input == "no") {ret_val = false; return true;}
+
+        std::cout << "Invalid input, press enter to retry or type anything to exit: ";
+        std::getline(std::cin, retry_input);
+        if(retry_input == "") {exit = true;}
+    }
+    return false;
+}
+
+bool PromptNumber(std::string prompt, std::uint32_t min, std::uint32_t max, int &ret_val)
+{
+    int input;
+    std::string retry_input;
+    bool exit = false;
+
+    while(!exit)
+    {
+        std::cout << prompt;
+        if(std::cin >> input && input >= min && input <= max)
+        {
+            ret_val = input;
+            return true;
+        }
+        std::cout << "Invalid input, press enter to retry or type anything to exit: ";
+        std::getline(std::cin, retry_input);
+        if(retry_input == "") {exit = true;}
+    }
     return false;
 }
 #pragma endregion
@@ -474,13 +501,33 @@ bool ReadAsset(const std::string &path, ic_asset &asset)
     return true;
 }
 
-bool CreateAsset(std::string name)
+bool CreateAsset(const std::string &name)
 {
     ic_asset asset;
     asset.uuid = icpak::generate_uuid();
     asset.name = name;
 
+    ic_asset editing_asset;
+    if(EditAsset(asset, editing_asset))
+    {
+        asset = editing_asset;
+    }
+
     return WriteAsset(asset);
+}
+// Overrides edited_asset with asset when called, do no supply an important asset
+bool EditAsset(const ic_asset &asset, ic_asset &edited_asset)
+{
+    edited_asset = asset;
+
+    if(edited_asset.asset_type == 0)
+    {
+        std::cout << "Detected no asset type, please select asset type";
+
+        
+    }
+
+    return true;
 }
 
 bool ProcessAssets()
