@@ -317,7 +317,7 @@ bool ReadDepotManifest(depot_manifest &manifest)
         U32ReadWithFail(block_asset_count, icmanfile)
 
         auto& assets = new_manifest.block_contents[i];
-        assets.reserve(block_asset_count);
+        assets.resize(block_asset_count);
 
         for(std::uint32_t j = 0; j < block_asset_count; ++j)
         {
@@ -468,7 +468,7 @@ bool ReadAsset(const std::string &path, ic_asset &asset)
     }
 
     U32ReadWithFail(name_size, icastfile)
-    new_asset.name.reserve(name_size);
+    new_asset.name.resize(name_size);
     if(!ValidatedByteRead(new_asset.name.data(), name_size, icastfile))
     {
         fclose(icastfile);
@@ -482,7 +482,7 @@ bool ReadAsset(const std::string &path, ic_asset &asset)
     }
 
     U32ReadWithFail(path_size, icastfile)
-    new_asset.path.reserve(path_size);
+    new_asset.path.resize(path_size);
     if(!ValidatedByteRead(new_asset.path.data(), path_size, icastfile))
     {
         fclose(icastfile);
