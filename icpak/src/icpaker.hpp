@@ -136,9 +136,9 @@ bool PromptYesNo(std::string prompt, bool def_val, bool &ret_val)
     return false;
 }
 
-bool PromptNumber(std::string prompt, std::uint32_t min, std::uint32_t max, int &ret_val)
+bool PromptNumber(std::string prompt, std::uint32_t min, std::uint32_t max, std::uint32_t &ret_val)
 {
-    int input;
+    std::uint32_t input;
     std::string retry_input;
     bool exit = false;
 
@@ -161,7 +161,7 @@ bool PromptNumber(std::string prompt, std::uint32_t min, std::uint32_t max, int 
 bool WriteDepotManifest(const depot_manifest &manifest)
 {
     std::string staging_file_name = std::string(ctx.debug_mode ? "depot-debug" : "depot") + "/staging/manifest.icman";
-    FILE* icmanfile = fopen64(staging_file_name.c_str(), "wb");
+    FILE* icmanfile = fopen(staging_file_name.c_str(), "wb");
     if(!icmanfile) return false;
 
     ////////// Asset uuids, hashes & locations
@@ -277,7 +277,7 @@ bool ReadDepotManifest(depot_manifest &manifest)
 
     std::string file_name = std::string(ctx.debug_mode ? "depot-debug" : "depot") + "/manifest.icman";
 
-    FILE* icmanfile = fopen64(file_name.c_str(), "rb");
+    FILE* icmanfile = fopen(file_name.c_str(), "rb");
     if(!icmanfile) return false;
 
     ////////// Assets
@@ -372,7 +372,7 @@ bool ReadDepotManifest(depot_manifest &manifest)
 bool WritePak(std::string name, std::vector<int> blocks)
 {
     std::string staging_file_name = std::string(ctx.debug_mode ? "depot-debug" : "depot") + "/staging/paks/" + name + ".icpak";
-    FILE* icpakfile = fopen64(staging_file_name.c_str(), "wb");
+    FILE* icpakfile = fopen(staging_file_name.c_str(), "wb");
     if(!icpakfile) return false;
 
     for(auto block : blocks)
@@ -406,8 +406,8 @@ bool WritePak(std::string name, std::vector<int> blocks)
 
 bool WriteAsset(const ic_asset &asset)
 {
-    std::string staging_file_name = std::string(ctx.debug_mode ? "staging/assets-debug/" : "staging/assets/") + asset.name + ".icast";
-    FILE* icastfile = fopen64(staging_file_name.c_str(), "wb");
+    std::string staging_file_name = std::string(ctx.debug_mode ? "assets-debug/staging/" : "assets/staging/") + asset.name + ".icast";
+    FILE* icastfile = fopen(staging_file_name.c_str(), "wb");
     if(!icastfile) return false;
 
     if(!ValidatedByteWrite(asset.uuid.data(), sizeof(icpak_uuid), icastfile))
@@ -446,7 +446,7 @@ bool WriteAsset(const ic_asset &asset)
 
     fclose(icastfile);
 
-    std::string file_name = std::string(ctx.debug_mode ? "assets-debug/" : "assets/") + asset.name + ".icpak";
+    std::string file_name = std::string(ctx.debug_mode ? "assets-debug/" : "assets/") + asset.name + ".icast";
     if(!std::filesystem::copy_file(staging_file_name, file_name, std::filesystem::copy_options::overwrite_existing))
     {
         return false;
@@ -458,7 +458,7 @@ bool ReadAsset(const std::string &path, ic_asset &asset)
 {
     ic_asset new_asset;
 
-    FILE* icastfile = fopen64(path.c_str(), "rb");
+    FILE* icastfile = fopen(path.c_str(), "rb");
     if(!icastfile) return false;
 
     if(!ValidatedByteRead(new_asset.uuid.data(), sizeof(icpak_uuid), icastfile))
@@ -501,6 +501,35 @@ bool ReadAsset(const std::string &path, ic_asset &asset)
     return true;
 }
 
+// Overrides edited_asset with asset when called, do no supply an important asset
+bool EditAsset(const ic_asset &asset, ic_asset &edited_asset)
+{
+    edited_asset = asset;
+
+    if(edited_asset.asset_type == 0)
+    {
+        std::cout << "Detected no asset type, please select asset type\n";
+
+        std::string options = "";
+        std::uint32_t max = 0;
+        
+        for(auto &[key, val] : icpak_asset_types)
+        {
+            options += key + "[" + std::to_string(val) + "] ";
+            max = std::max(max, (std::uint32_t)val);
+        }
+        std::cout << options;
+
+        std::uint32_t num;
+        if(PromptNumber("[0-" + std::to_string(max) + "]: ", 0, max, num))
+        {
+            edited_asset.asset_type = (icpak_asset_type)num;
+        }
+    }
+
+    return true;
+}
+
 bool CreateAsset(const std::string &name)
 {
     ic_asset asset;
@@ -515,28 +544,33 @@ bool CreateAsset(const std::string &name)
 
     return WriteAsset(asset);
 }
-// Overrides edited_asset with asset when called, do no supply an important asset
-bool EditAsset(const ic_asset &asset, ic_asset &edited_asset)
-{
-    edited_asset = asset;
-
-    if(edited_asset.asset_type == 0)
-    {
-        std::cout << "Detected no asset type, please select asset type";
-
-        
-    }
-
-    return true;
-}
 
 bool ProcessAssets()
 {
     return false;
 }
 
+bool CreateDirectories()
+{
+    std::filesystem::create_directories("assets/staging/");
+    std::filesystem::create_directories("assets-debug/staging/");
+
+    std::filesystem::create_directories("depot/blocks/");
+    std::filesystem::create_directories("depot/paks/");
+    std::filesystem::create_directories("depot/staging/blocks/");
+    std::filesystem::create_directories("depot/staging/paks/");
+
+    std::filesystem::create_directories("depot-debug/blocks/");
+    std::filesystem::create_directories("depot-debug/paks/");
+    std::filesystem::create_directories("depot-debug/staging/blocks/");
+    std::filesystem::create_directories("depot-debug/staging/paks/");
+
+    return true;
+}
+
 int paker()
 {
+    CreateDirectories(); // Ensure all directories exist.
     bool exit = true;
 
     while (!exit)
@@ -544,7 +578,7 @@ int paker()
         std::string command;
     }
 
-    PromptYesNo("Testing", true, exit);
+    CreateAsset("Test");
 
     return 0;
 }

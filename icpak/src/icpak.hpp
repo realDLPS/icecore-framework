@@ -20,8 +20,13 @@ enum icpak_compression_type : std::uint8_t
 
 enum icpak_asset_type : std::uint8_t
 {
-    ASSET_TYPE_UNSET = 0,
-    Texture = 1
+    ASSET_TYPE_UNSET = 0, // Asset type hasn't been set, use BYTE_ASSET if you don't care about type information.
+    BYTE_ASSET = 1 // Asset that has had it's type defined as no type, aka only containing bytes.
+};
+
+std::map<std::string, icpak_asset_type> icpak_asset_types{
+    {"UNSET", ASSET_TYPE_UNSET},
+    {"BYTE ASSET", BYTE_ASSET}
 };
 
 struct icpak_asset_header

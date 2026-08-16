@@ -134,9 +134,11 @@ content/
     jump.wav
 icpak/
     assets/
+        staging/
         asset-1.icast
         asset-d.icast
     assets-debug/
+        staging/
         debug-asset-1.icast
     depot/
         blocks/
