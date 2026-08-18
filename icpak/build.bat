@@ -42,6 +42,7 @@ GOTO :build
 
 :buildDebug
 SET Build=0
+SET Clean=1
 echo Building Debug, this might take a while!
 IF %Clean%==1 rd /s /q build\debug\
 cmake -DCMAKE_BUILD_TYPE=Debug -DOPENSSL_ROOT_DIR=C:/msys64/ucrt64 -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -S %cd% -B %cd%\build\debug -G Ninja

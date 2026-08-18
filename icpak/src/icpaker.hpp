@@ -454,6 +454,13 @@ bool WriteAsset(const ic_asset &asset)
     return true;
 }
 
+bool DeleteAsset(const ic_asset &asset)
+{
+    std::string file_name = std::string(ctx.debug_mode ? "assets-debug/" : "assets/") + asset.name + ".icast";
+    
+    return std::filesystem::remove(file_name);
+}
+
 bool ReadAsset(const std::string &path, ic_asset &asset)
 {
     ic_asset new_asset;
@@ -506,10 +513,8 @@ bool EditAsset(const ic_asset &asset, ic_asset &edited_asset)
 {
     edited_asset = asset;
 
-    if(edited_asset.asset_type == 0)
+    auto EditType = [&edited_asset]() 
     {
-        std::cout << "Detected no asset type, please select asset type\n";
-
         std::string options = "";
         std::uint32_t max = 0;
         
@@ -525,6 +530,62 @@ bool EditAsset(const ic_asset &asset, ic_asset &edited_asset)
         {
             edited_asset.asset_type = (icpak_asset_type)num;
         }
+        else
+        {
+            return false;
+        }
+
+        return true;
+    };
+
+    auto EditName = [&asset, &edited_asset]()
+    {
+        std::cout << "Enter new name: ";
+        std::string input;
+        std::cin.ignore();
+        std::getline(std::cin, input);
+        std::cout << "\n";
+
+        edited_asset.name = input;
+
+        if(WriteAsset(edited_asset))
+        {
+            std::cout << "Wrote asset with name name, deleting old asset";
+
+            DeleteAsset(asset);
+        }
+        else
+        {
+            std::cout << "Failed to write edited asset";
+            return false;
+        }
+        
+        return true;
+    };
+
+    if(edited_asset.asset_type == 0)
+    {
+        std::cout << "Detected no asset type, please select asset type\n";
+
+        return EditType();
+    }
+
+    std::cout << "Select property to edit\n";
+    std::uint32_t num;
+    if(PromptNumber("Name[0] Asset type[1] Path[2] Compression type[3] [0-3]: ", 0, 3, num))
+    {
+        if(num == 0)
+        {
+            return EditName();
+        }
+        else if(num == 1)
+        {
+            return EditType();
+        }
+    }
+    else
+    {
+        return false;
     }
 
     return true;
@@ -577,8 +638,17 @@ int paker()
     {
         std::string command;
     }
-
-    CreateAsset("Test");
+    ic_asset asset;
+    if(ReadAsset("assets/Test.icast", asset))
+    {
+        ic_asset edited_asset;
+        EditAsset(asset, edited_asset);
+    }
+    else
+    {
+        CreateAsset("Test");
+    }
+    
 
     return 0;
 }
