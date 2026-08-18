@@ -635,7 +635,7 @@ static icfw_input_action INPUT_ACTION(icfw_input_value_type value_type, std::vec
 {
     auto a = icfw_input_action();
     a.value_type = value_type;
-    if(value_type = digital)
+    if(value_type == digital)
     {
         a.last_state = up;
     }
