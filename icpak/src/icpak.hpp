@@ -13,47 +13,6 @@
 #define BLOCK_SIZE 1048576 // 1 MiB, you may specify another size by defining yourself.
 #endif
 
-enum icpak_compression_type : std::uint8_t
-{
-    UNCOMPRESSED = 0
-};
-
-enum icpak_asset_type : std::uint8_t
-{
-    ASSET_TYPE_UNSET = 0, // Asset type hasn't been set, use BYTE_ASSET if you don't care about type information.
-    BYTE_ASSET = 1 // Asset that has had it's type defined as no type, aka only containing bytes.
-};
-
-std::map<std::string, icpak_asset_type> icpak_asset_types{
-    {"UNSET", ASSET_TYPE_UNSET},
-    {"BYTE ASSET", BYTE_ASSET}
-};
-
-struct icpak_asset_header
-{
-    icpak_asset_type asset_type;
-    icpak_compression_type compression_type;
-    std::uint8_t asset_flags; // Following flags are available 
-    /*
-    0: reserved 
-    1: reserved
-    2: reserved
-    3: reserved
-    4: reserved
-    5: reserved
-    6: reserved
-    7: reserved
-    */
-    std::int32_t block; // Which block the asset is in
-    std::int32_t offset; // Byte offset inside the block the asset is stored in
-    
-    std::int32_t compressed_size; // Byte size of the asset when compressed
-    std::int32_t size; // Byte size of the asset after decompression
-    
-    sha256_hash compressed_hash;
-    sha256_hash uncompressed_hash;
-};
-
 struct icpak_index
 {
     std::int32_t block_count;

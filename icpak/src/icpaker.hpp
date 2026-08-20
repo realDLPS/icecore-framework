@@ -44,26 +44,7 @@ struct ic_asset
     icpak_compression_type compression_type = UNCOMPRESSED;
 };
 
-#pragma region Conversions
-// Big endian
-std::array<std::uint8_t, 4> ToByte(std::uint32_t u32)
-{
-    std::array<std::uint8_t, 4> ret_val;
-    ret_val[0] = (uint8_t)(u32 >> 24);
-    ret_val[1] = (uint8_t)(u32 >> 16);
-    ret_val[2] = (uint8_t)(u32 >> 8);
-    ret_val[3] = (uint8_t)u32;
-    
-    return ret_val;
-}
-// Big endian
-std::uint32_t FromByte(std::array<std::uint8_t, 4> u8)
-{
-    uint32_t ret_val;
-    ret_val = (((uint32_t)u8[0]) << 24) | (((uint32_t)u8[1]) << 16) | (((uint32_t)u8[2]) << 8) | ((uint32_t)u8[3]);
-    return ret_val;
-}
-#pragma endregion
+
 
 
 

@@ -38,7 +38,7 @@ target_compile_options(${APP_TARGET} PRIVATE
 target_compile_options(${APP_TARGET} PRIVATE
     $<$<CONFIG:Release>:-O3 -fno-ident -flto -ffunction-sections -fdata-sections>
     $<$<CONFIG:Debug>:-O0 -g>
-    $<$<CONFIG:Test>:-O3 -fno-ident -flto -ffunction-sections -fdata-sections>
+    $<$<CONFIG:Test>:-O0 -g>
 )
 
 target_link_options(${APP_TARGET} PRIVATE
