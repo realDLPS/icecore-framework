@@ -39,3 +39,6 @@ build/
 
 # Emscripten
 emsdk/
+
+# doctest
+doctest/

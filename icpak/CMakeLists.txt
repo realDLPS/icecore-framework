@@ -17,9 +17,18 @@ find_package(OpenSSL REQUIRED)
 
 add_executable(${APP_TARGET}
     main.cpp
+    src/icpak_io.hpp
+    src/icpak_openssl.hpp
+    src/icpak_reader.hpp
+    src/icpak_types.hpp
     src/icpak.hpp
     src/icpaker.hpp
-    src/icpak_openssl.hpp
+)
+
+target_compile_definitions(${APP_TARGET} PRIVATE
+    $<$<CONFIG:Debug>:BUILD_DEBUG>
+    $<$<CONFIG:Release>:BUILD_RELEASE>
+    $<$<CONFIG:Test>:BUILD_TEST>
 )
 
 target_compile_options(${APP_TARGET} PRIVATE
@@ -29,27 +38,11 @@ target_compile_options(${APP_TARGET} PRIVATE
 target_compile_options(${APP_TARGET} PRIVATE
     $<$<CONFIG:Release>:-O3 -fno-ident -flto -ffunction-sections -fdata-sections>
     $<$<CONFIG:Debug>:-O0 -g>
+    $<$<CONFIG:Test>:-O3 -fno-ident -flto -ffunction-sections -fdata-sections>
 )
 
 target_link_options(${APP_TARGET} PRIVATE
     $<$<CONFIG:Debug>:-Wl,--gc-sections>
 )
-
-find_program(UPX_EXECUTABLE upx)
-
-
-if(UPX_EXECUTABLE AND WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_custom_command(
-        TARGET ${APP_TARGET}
-        POST_BUILD
-        COMMAND 
-            ${UPX_EXECUTABLE} --best --lzma $<TARGET_FILE:${APP_TARGET}>
-        COMMENT "Compressing executable with UPX"
-    )
-endif()
-
-if(ipo_supported)
-    set_property(TARGET ${APP_TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION $<CONFIG:Release>)
-endif()
 
 target_link_libraries(${APP_TARGET} PRIVATE OpenSSL::Crypto)

@@ -154,3 +154,21 @@ icpak/
             blocks/
             paks/
         manifest.icman
+
+
+
+
+# Ver2
+Spent 2ish weeks with the 1st iteration, now defining how I want to proceed.
+
+## Definitions:
+- ICPAK: Refers to this project.
+- ICPAKER (or packer): The editor/packing utility of ICPAK. This will primarily target Windows.
+
+## Runtime Formats
+- .icpak: The file format what the user (player) will have content delivered in.
+- .icpak-index: The file format containing information on what an .icpak contains.
+## Packer Formats
+- .icman: A manifest file containing information the packer needs to run
+- .icblock: An already built block containing data the packer will copy into an .icpak when packing.
+- .icast: Holds information such as asset uuid, content path

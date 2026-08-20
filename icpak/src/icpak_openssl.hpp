@@ -8,12 +8,12 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
-typedef std::array<std::uint8_t, 32> sha256_hash;
+#include "icpak_types.hpp"
 
 sha256_hash sha256(std::span<const std::uint8_t> bytes)
 {
     sha256_hash hash;
-    SHA256(bytes.data(), bytes.size(), hash.data());
+    SHA256(bytes.data(), bytes.size(), hash.hash_bytes.data());
     return hash;
 }
 
@@ -28,7 +28,7 @@ public:
         SHA256_Init(&hash_ctx);
     }
 
-    void UpdateHash(std::span<const std::uint8_t> bytes)
+    void UpdateHash(std::span<const byte> bytes)
     {
         SHA256_Update(&hash_ctx, bytes.data(), bytes.size());
     }
@@ -37,11 +37,9 @@ public:
     {
         unsigned char hash[32];
         SHA256_Final(hash, &hash_ctx);
-        return std::to_array<std::uint8_t, 32>(hash);
+        return sha256_hash(std::to_array<byte, sha256_hash_size>(hash));
     }
 };
-
-typedef std::array<std::uint8_t, 16> icpak_uuid;
 
 namespace icpak
 {
