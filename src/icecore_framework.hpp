@@ -56,10 +56,10 @@ namespace engine {
 
 #endif
 
-void InputTick();
+inline void InputTick();
 
 namespace engine {
-void internal_tick(float delta_time)
+inline void internal_tick(float delta_time)
 {
     #if defined(ICFW_INPUT)
     InputTick();
@@ -69,7 +69,7 @@ void internal_tick(float delta_time)
 
 #if defined(PLATFORM_WEB)
 namespace engine {
-void web_tick(void)
+inline void web_tick(void)
 {
     double delta = emscripten_get_now() - last_frame_time;
     engine::internal_tick(float(delta) / 1000.f)
@@ -85,7 +85,7 @@ void web_tick(void)
 }
 #endif
 
-void MP_InitWindow(std::function<void (float deltaTime)> tick, int width=640, int height=320, std::string title="Hello world!")
+inline void MP_InitWindow(std::function<void (float deltaTime)> tick, int width=640, int height=320, std::string title="Hello world!")
 {
     InitWindow(width, height, title.c_str());
 
@@ -105,14 +105,14 @@ void MP_InitWindow(std::function<void (float deltaTime)> tick, int width=640, in
     return;
 }
 
-void MP_SetMaxFPS(int newMaxFPS)
+inline void MP_SetMaxFPS(int newMaxFPS)
 {
     engine::target_fps = newMaxFPS;
     SetTargetFPS(newMaxFPS);
 }
 
 // Multiplatform exit function
-void MP_Exit()
+inline void MP_Exit()
 {
     engine::exit_started = true;
 }
@@ -229,17 +229,17 @@ struct icfw_camera
 typedef std::vector<std::shared_ptr<icfw_drawable>> icfw_draw_queue;
 
 namespace engine {
-    static icfw_camera default_camera = icfw_camera();
-    static icfw_draw_queue default_draw_queue;
+    inline icfw_camera default_camera = icfw_camera();
+    inline icfw_draw_queue default_draw_queue;
 }
 
 
-float GetScreenSizeScaling()
+inline float GetScreenSizeScaling()
 {
     return (GetRenderWidth() / 1920.0f >= GetRenderHeight() / 1080.0f) ? GetRenderWidth() / 1920.0f : GetRenderHeight() / 1080.0f;
 }
 
-Vector2 WorldToViewSpace(Vector2 worldPosition, icfw_camera camera = engine::default_camera)
+inline Vector2 WorldToViewSpace(Vector2 worldPosition, icfw_camera camera = engine::default_camera)
 {
     // Convert to camera position, basically relative to the camera
     Vector2 WorkingPosition = worldPosition * Vec2(1, -1) - camera.location * Vec2(1, -1);
@@ -257,7 +257,7 @@ Vector2 WorldToViewSpace(Vector2 worldPosition, icfw_camera camera = engine::def
     return WorkingPosition + Vec2(float(GetScreenWidth()) / 2.0f, float(GetScreenHeight()) / 2.0f);
 }
 
-void DrawSprite(icfw_sprite sprite, Vector2 location = Vec2(0.0f), float rotation = 0.0f, Vector2 scale = Vec2(1.0f), Color tint = WHITE, int frame = 0, icfw_camera camera = engine::default_camera)
+inline void DrawSprite(icfw_sprite sprite, Vector2 location = Vec2(0.0f), float rotation = 0.0f, Vector2 scale = Vec2(1.0f), Color tint = WHITE, int frame = 0, icfw_camera camera = engine::default_camera)
 {
     //Rectangle dest = { location.x, location.y, (float)sprite.texture.width*scale.x, (float)sprite.texture.height*scale.y };
 
@@ -309,7 +309,7 @@ void DrawSprite(icfw_sprite sprite, Vector2 location = Vec2(0.0f), float rotatio
     );
 }
 
-void DrawDrawable(std::shared_ptr<icfw_drawable> drawable, icfw_camera camera = engine::default_camera)
+inline void DrawDrawable(std::shared_ptr<icfw_drawable> drawable, icfw_camera camera = engine::default_camera)
 {
     auto p = drawable.get();
     // Automatically animate drawable.
@@ -320,16 +320,16 @@ void DrawDrawable(std::shared_ptr<icfw_drawable> drawable, icfw_camera camera = 
     DrawSprite(p->sprite, p->location, p->rotation, p->scale, p->tint, p->frame, camera);
 }
 
-void SetDefaultCameraLocation(Vector2 location) { engine::default_camera.location = location; }
-Vector2 GetDefaultCameraLocation() { return engine::default_camera.location; }
-void SetDefaultCameraZoom(float zoom) { engine::default_camera.zoom = zoom; }
-float GetDefaultCameraZoom() { return engine::default_camera.zoom; }
-void SetDefaultCameraRotation(float rotation) { engine::default_camera.rotation = rotation; }
-float GetDefaultCameraRotation() { return engine::default_camera.rotation; }
+inline void SetDefaultCameraLocation(Vector2 location) { engine::default_camera.location = location; }
+inline Vector2 GetDefaultCameraLocation() { return engine::default_camera.location; }
+inline void SetDefaultCameraZoom(float zoom) { engine::default_camera.zoom = zoom; }
+inline float GetDefaultCameraZoom() { return engine::default_camera.zoom; }
+inline void SetDefaultCameraRotation(float rotation) { engine::default_camera.rotation = rotation; }
+inline float GetDefaultCameraRotation() { return engine::default_camera.rotation; }
 
 
 // Add sprite to a draw queue
-void AddToDrawQueue(icfw_sprite sprite, Vector2 location = Vec2(0.0f), Vector2 scale=Vec2(1.0f), float rotation = 0.0f, Color tint = WHITE, int frame = 0, icfw_draw_queue &target_queue = engine::default_draw_queue)
+inline void AddToDrawQueue(icfw_sprite sprite, Vector2 location = Vec2(0.0f), Vector2 scale=Vec2(1.0f), float rotation = 0.0f, Color tint = WHITE, int frame = 0, icfw_draw_queue &target_queue = engine::default_draw_queue)
 {
     std::shared_ptr<icfw_drawable> drawable(new icfw_drawable);
 
@@ -343,13 +343,13 @@ void AddToDrawQueue(icfw_sprite sprite, Vector2 location = Vec2(0.0f), Vector2 s
     target_queue.push_back(drawable);
 }
 // Add drawable to a draw queue
-void AddToDrawQueue(std::shared_ptr<icfw_drawable> drawable, icfw_draw_queue &target_queue = engine::default_draw_queue)
+inline void AddToDrawQueue(std::shared_ptr<icfw_drawable> drawable, icfw_draw_queue &target_queue = engine::default_draw_queue)
 {
     target_queue.push_back(drawable);
 }
 
 // Draw all drawables in a draw queue using a camera to a render texture
-void DrawQueue(icfw_draw_queue &draw_queue, icfw_camera &camera, RenderTexture2D &render_target)
+inline void DrawQueue(icfw_draw_queue &draw_queue, icfw_camera &camera, RenderTexture2D &render_target)
 {
     BeginTextureMode(render_target);
 
@@ -464,24 +464,24 @@ struct icfw_input_state
 };
 
 namespace engine {
-    static std::map<std::string, icfw_input_mapping> input_mappings = std::map<std::string, icfw_input_mapping>();
-    static std::string current_input_mapping = "";
+    inline std::map<std::string, icfw_input_mapping> input_mappings = std::map<std::string, icfw_input_mapping>();
+    inline std::string current_input_mapping = "";
 
     // These are updated any time input mapping is changed
-    static std::vector<int> keyboard_buttons_to_gather = std::vector<int>();
-    static std::vector<int> mouse_buttons_to_gather = std::vector<int>();
-    static std::vector<int> mouse_axis_to_gather = std::vector<int>();
-    static std::vector<int> gamepad_buttons_to_gather = std::vector<int>();
-    static std::vector<int> gamepad_axis_to_gather = std::vector<int>();
+    inline std::vector<int> keyboard_buttons_to_gather = std::vector<int>();
+    inline std::vector<int> mouse_buttons_to_gather = std::vector<int>();
+    inline std::vector<int> mouse_axis_to_gather = std::vector<int>();
+    inline std::vector<int> gamepad_buttons_to_gather = std::vector<int>();
+    inline std::vector<int> gamepad_axis_to_gather = std::vector<int>();
 
     // These are updated each frame
-    static icfw_input_state current_state = icfw_input_state();
+    inline icfw_input_state current_state = icfw_input_state();
 
-    static std::unordered_set<int> consumed_keyboard_buttons = std::unordered_set<int>();
-    static std::unordered_set<int> consumed_mouse_buttons = std::unordered_set<int>();
-    static std::unordered_set<int> consumed_mouse_axis = std::unordered_set<int>();
-    static std::unordered_set<int> consumed_gamepad_buttons = std::unordered_set<int>();
-    static std::unordered_set<int> consumed_gamepad_axis = std::unordered_set<int>();
+    inline std::unordered_set<int> consumed_keyboard_buttons = std::unordered_set<int>();
+    inline std::unordered_set<int> consumed_mouse_buttons = std::unordered_set<int>();
+    inline std::unordered_set<int> consumed_mouse_axis = std::unordered_set<int>();
+    inline std::unordered_set<int> consumed_gamepad_buttons = std::unordered_set<int>();
+    inline std::unordered_set<int> consumed_gamepad_axis = std::unordered_set<int>();
 }
 
 struct icfw_input_trigger
@@ -654,7 +654,7 @@ static icfw_input_mapping INPUT_MAPPING(std::vector<icfw_input_action> actions)
     return a;
 }
 
-void AddMapping(icfw_input_mapping mapping, std::string name="")
+inline void AddMapping(icfw_input_mapping mapping, std::string name="")
 {
     std::string target_name = name;
     if(target_name=="")
@@ -667,7 +667,7 @@ void AddMapping(icfw_input_mapping mapping, std::string name="")
 
 namespace engine {
     // Removes duplicate integers from a vector
-    void RemoveDuplicates(std::vector<int> &v)
+    inline void RemoveDuplicates(std::vector<int> &v)
     {
         std::unordered_set<int> seen;
         v.erase(std::remove_if(v.begin(), v.end(), [&](int x) { return !seen.insert(x).second; }), v.end());
@@ -676,7 +676,7 @@ namespace engine {
 
 // Loads a mapping based on it's name
 // Add a mapping first using AddMapping()
-void LoadMapping(std::string name)
+inline void LoadMapping(std::string name)
 {
     engine::current_input_mapping = name;
 
@@ -734,7 +734,7 @@ void LoadMapping(std::string name)
     engine::RemoveDuplicates(engine::gamepad_axis_to_gather);
 }
 
-void GatherInputs()
+inline void GatherInputs()
 {
     engine::current_state = icfw_input_state();
 
@@ -792,7 +792,7 @@ void GatherInputs()
         }
     }
 }
-void UpdateActions()
+inline void UpdateActions()
 {
     if(engine::current_input_mapping == "") {   return;   }
     icfw_input_mapping current_mapping = engine::input_mappings[engine::current_input_mapping];
@@ -892,12 +892,12 @@ void UpdateActions()
     
 }
 #if defined(ICFW_UI)
-void UpdateUIInput()
+inline void UpdateUIInput()
 {
 
 }
 #endif
-void InputTick()
+inline void InputTick()
 {
     GatherInputs();
     UpdateActions();

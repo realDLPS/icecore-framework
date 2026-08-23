@@ -18,7 +18,7 @@ typedef std::array<byte, sizeof(u32)> u32bytes;
 
 #pragma region Conversions
 // Big endian
-u32bytes ToByte(u32 a)
+inline u32bytes ToByte(u32 a)
 {
     std::array<byte, 4> ret_val;
     ret_val[0] = (byte)(a >> 24);
@@ -29,7 +29,7 @@ u32bytes ToByte(u32 a)
     return ret_val;
 }
 // Big endian
-u32 FromByte(u32bytes bytes)
+inline u32 FromByte(u32bytes bytes)
 {
     u32 ret_val;
     ret_val = (((u32)bytes[0]) << 24) | (((u32)bytes[1]) << 16) | (((u32)bytes[2]) << 8) | ((u32)bytes[3]);
@@ -83,7 +83,7 @@ struct sha256_hash : virtual Serializable
         std::copy_n(bytes.begin(), sha256_hash_size, hash_bytes.begin());
     }
 };
-const bool operator==(const sha256_hash &lhs, const sha256_hash &rhs)
+inline const bool operator==(const sha256_hash &lhs, const sha256_hash &rhs)
 {
     return std::ranges::equal(lhs.hash_bytes, rhs.hash_bytes);
 }
@@ -122,12 +122,15 @@ TEST_CASE("Testing hash serialization") {
 #pragma endregion
 
 
+
+
+
 #pragma region UUID
 // Size of a ICPAK UUID in bytes
 static constexpr u32 icpak_uuid_size = 16;
 typedef std::array<byte, icpak_uuid_size> icpak_uuid;
 
-const bool operator==(const icpak_uuid &lhs, const icpak_uuid &rhs)
+inline const bool operator==(const icpak_uuid &lhs, const icpak_uuid &rhs)
 {
     return std::ranges::equal(lhs, rhs);
 }
@@ -150,7 +153,10 @@ TEST_CASE("Checking UUID comparison") {
 #pragma endregion
 
 
-#pragma region Runtime // These types are required when loaded by the game
+
+
+// These types are required when loaded by the game
+#pragma region Runtime 
 
 namespace icpak {
 enum compression_type : byte
@@ -159,7 +165,7 @@ enum compression_type : byte
 };
 }
 
-
+#pragma region Asset header
 struct icpak_asset_header : virtual Serializable
 {
     icpak_asset_header(){};
@@ -274,7 +280,7 @@ struct icpak_asset_header : virtual Serializable
         return;
     }
 };
-const bool operator==(const icpak_asset_header &lhs, const icpak_asset_header &rhs)
+inline const bool operator==(const icpak_asset_header &lhs, const icpak_asset_header &rhs)
 {
     if(lhs.asset_type != rhs.asset_type) {return false;}
     if(lhs.compression_type != rhs.compression_type) {return false;}
@@ -288,8 +294,6 @@ const bool operator==(const icpak_asset_header &lhs, const icpak_asset_header &r
 
     return true;
 }
-
-
 #if defined(BUILD_TEST)
 TEST_CASE("Testing icpak_asset_header comparison") {
     icpak_asset_header ast1 = icpak_asset_header();
@@ -311,5 +315,11 @@ TEST_CASE("Testing icpak_asset_header serialization") {
     CHECK(original == converted);
 }
 #endif
+#pragma endregion
+
+
+
+
+
 
 #pragma endregion
