@@ -39,9 +39,9 @@ struct ic_asset
 {
     icpak_uuid uuid;
     std::string name;
-    icpak_asset_type asset_type = ASSET_TYPE_UNSET;
+    icpak_asset_type asset_type = 0;
     std::string path = "";
-    icpak_compression_type compression_type = UNCOMPRESSED;
+    icpak::compression_type compression_type = icpak::UNCOMPRESSED;
 };
 
 

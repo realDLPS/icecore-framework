@@ -9,9 +9,7 @@
 
 #include "icpak_openssl.hpp"
 
-#ifndef BLOCK_SIZE
-#define BLOCK_SIZE 1048576 // 1 MiB, you may specify another size by defining yourself.
-#endif
+
 
 struct icpak_index
 {

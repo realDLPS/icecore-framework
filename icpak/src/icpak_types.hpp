@@ -4,6 +4,7 @@
 #include <ranges>
 #include <iterator>
 #include <stdexcept>
+#include <map>
 
 #include <cstdint>
 #include <cstring>
@@ -12,9 +13,25 @@
 #include "../../doctest/doctest/doctest.h"
 #endif
 
+#ifndef BLOCK_SIZE
+#define BLOCK_SIZE 1048576 // 1 MiB, you may specify another size by defining yourself.
+#endif
+
 typedef std::uint8_t byte;
 typedef std::uint32_t u32;
 typedef std::array<byte, sizeof(u32)> u32bytes;
+typedef std::uint8_t icpak_asset_type;
+
+#pragma region Helpers
+// Copies bytes from a std::vector<byte> to either std::vector or std::array
+// Updates the used bytes variable.
+template <typename Dest>
+void CopyBytes(const std::vector<byte>& bytes, u32& used_bytes, u32 copied_byte_count, Dest& target)
+{
+    std::copy_n(bytes.begin() + used_bytes, copied_byte_count, target.begin());
+    used_bytes += copied_byte_count;
+}
+#pragma endregion
 
 #pragma region Conversions
 // Big endian
@@ -68,7 +85,10 @@ struct sha256_hash : virtual Serializable
     {
         hash_bytes = hash;
     }
-
+    static const uint32_t byte_size()
+    {
+        return sha256_hash_size;
+    }
     std::vector<byte> Serialize()
     {
         return std::vector<byte>(hash_bytes.begin(), hash_bytes.end());
@@ -170,7 +190,7 @@ struct icpak_asset_header : virtual Serializable
 {
     icpak_asset_header(){};
 
-    byte asset_type = 0; // Optional meta data that the loader (the programmer) may use.
+    icpak_asset_type asset_type = 0; // Optional meta data that the loader (the programmer) may use.
     icpak::compression_type compression_type = icpak::UNCOMPRESSED;
     byte asset_flags = 0; // One byte reserved for flag usage. Reservations may be lifted later on.
     /*
@@ -192,18 +212,23 @@ struct icpak_asset_header : virtual Serializable
     sha256_hash compressed_hash;
     sha256_hash uncompressed_hash;
 
-    std::vector<byte> Serialize()
+    static const uint32_t byte_size()
     {
-        std::vector<byte> ret_val;
-        ret_val.reserve(
-            sizeof(asset_type)+
+        return (sizeof(asset_type)+
             sizeof(compression_type)+
             sizeof(asset_flags)+
             sizeof(block)+
             sizeof(offset)+
             sizeof(compressed_size)+
             sizeof(size)+
-            2 * sha256_hash_size
+            2 * sha256_hash_size);
+    }
+
+    std::vector<byte> Serialize()
+    {
+        std::vector<byte> ret_val;
+        ret_val.reserve(
+            byte_size()
         );
 
         ret_val.push_back(asset_type);
@@ -321,5 +346,75 @@ TEST_CASE("Testing icpak_asset_header serialization") {
 
 
 
+#pragma region PAK index
+struct icpak_index : Serializable
+{
+    u32 block_count;
+    std::vector<std::uint32_t> block_sizes; // A multiplier of BLOCK_SIZE
+    std::vector<sha256_hash> block_hashes;
+    std::map<icpak_uuid, icpak_asset_header> asset_map;
 
+    // Calculates the offset to a block inside an icpak.
+    bool CalculateBlockOffset(std::int32_t block, std::uint64_t &result, std::int32_t block_size = BLOCK_SIZE)
+    {
+        if(block > block_count) {   return false;   }
+
+        std::uint64_t offset = 0;
+
+        for(int i = 0; i < block; i++)
+        {
+            offset += (std::uint64_t)(block_sizes[i] * block_size);
+        }
+
+        result = offset;
+        return true;
+    }
+
+    virtual std::vector<byte> Serialize()
+    {
+        std::vector<byte> ret_val;
+        ret_val.reserve(
+            sizeof(block_count)+
+            (sizeof(std::uint32_t) * block_sizes.size())+
+            (sha256_hash_size * block_hashes.size())+
+            ((icpak_uuid_size + icpak_asset_header::byte_size()) * asset_map.size())
+        );
+
+        u32bytes block_count_bytes = ToByte(block_count);
+        ret_val.insert(ret_val.end(), block_count_bytes.begin(), block_count_bytes.end());
+
+        auto asset_mapping = asset_map.begin();
+
+        for (u32 i = 0; i < block_count; ++i)
+        {
+            u32bytes block_size_bytes = ToByte(block_sizes[i]);
+            ret_val.insert(ret_val.end(), block_size_bytes.begin(), block_size_bytes.end());
+
+            auto block_hash_bytes = block_hashes[i].Serialize();
+            ret_val.insert(ret_val.end(), block_hash_bytes.begin(), block_hash_bytes.end());
+
+            ret_val.insert(ret_val.end(), asset_mapping->first.begin(), asset_mapping->first.end()); // UUID
+            auto asset_header_bytes = asset_mapping->second.Serialize(); // Asset header
+            ret_val.insert(ret_val.end(), asset_header_bytes.begin(), asset_header_bytes.end());
+            std::next(asset_mapping, 1);
+        }
+
+        return ret_val;
+    }
+    virtual void Deserialize(std::vector<byte> &bytes)
+    {
+        u32 used_bytes = 0;
+
+        u32bytes block_count_bytes;
+        CopyBytes(bytes, used_bytes, sizeof(u32), block_count_bytes);
+        block_count = FromByte(block_count_bytes);
+
+        for (u32 i = 0; i < block_count; i++)
+        {
+            
+        }
+        
+    }
+};
+#pragma endregion
 #pragma endregion
