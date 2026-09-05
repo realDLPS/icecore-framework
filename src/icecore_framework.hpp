@@ -72,7 +72,7 @@ namespace engine {
 inline void web_tick(void)
 {
     double delta = emscripten_get_now() - last_frame_time;
-    engine::internal_tick(float(delta) / 1000.f)
+    engine::internal_tick(float(delta) / 1000.f);
 
     int frame_width = 0;
     int frame_height = 0;
@@ -418,7 +418,7 @@ enum icfw_mouse_inputs
 };
 namespace engine{
     // Mappings of icfw mouse inputs to raylib mouse inputs
-    int mouse_mapping[7] = {MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_MIDDLE_BUTTON, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_BACK, MOUSE_BUTTON_SIDE, MOUSE_BUTTON_EXTRA};
+    static int mouse_mapping[7] = {MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_MIDDLE_BUTTON, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_BACK, MOUSE_BUTTON_SIDE, MOUSE_BUTTON_EXTRA};
 }
 
 enum icfw_gamepad_inputs
@@ -450,7 +450,7 @@ enum icfw_gamepad_inputs
 };
 namespace engine{
     // Mappings of icfw gamepad inputs to raylib gamepad inputs
-    int gamepad_mapping[24] = {GAMEPAD_BUTTON_UNKNOWN, GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT, GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT, GAMEPAD_BUTTON_RIGHT_FACE_UP, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_LEFT_TRIGGER_1, GAMEPAD_BUTTON_LEFT_TRIGGER_2, GAMEPAD_BUTTON_RIGHT_TRIGGER_1, GAMEPAD_BUTTON_RIGHT_TRIGGER_2, GAMEPAD_BUTTON_MIDDLE_LEFT, GAMEPAD_BUTTON_MIDDLE, GAMEPAD_BUTTON_MIDDLE_RIGHT, GAMEPAD_BUTTON_LEFT_THUMB, GAMEPAD_BUTTON_RIGHT_THUMB, GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y, GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y, GAMEPAD_AXIS_LEFT_TRIGGER, GAMEPAD_AXIS_RIGHT_TRIGGER};
+    static int gamepad_mapping[24] = {GAMEPAD_BUTTON_UNKNOWN, GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT, GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT, GAMEPAD_BUTTON_RIGHT_FACE_UP, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_LEFT_TRIGGER_1, GAMEPAD_BUTTON_LEFT_TRIGGER_2, GAMEPAD_BUTTON_RIGHT_TRIGGER_1, GAMEPAD_BUTTON_RIGHT_TRIGGER_2, GAMEPAD_BUTTON_MIDDLE_LEFT, GAMEPAD_BUTTON_MIDDLE, GAMEPAD_BUTTON_MIDDLE_RIGHT, GAMEPAD_BUTTON_LEFT_THUMB, GAMEPAD_BUTTON_RIGHT_THUMB, GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y, GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y, GAMEPAD_AXIS_LEFT_TRIGGER, GAMEPAD_AXIS_RIGHT_TRIGGER};
 }
 
 struct icfw_input_mapping;
@@ -690,7 +690,7 @@ inline void LoadMapping(std::string name)
 
     if(name == "" || !engine::input_mappings.contains(name))  {   return;   }
 
-    icfw_input_mapping loaded_mapping = engine::input_mappings[name];
+    icfw_input_mapping &loaded_mapping = engine::input_mappings[name];
 
     for (size_t i = 0; i < loaded_mapping.actions.size(); i++) // Loop through all actions and their triggers and add them to the gather lists
     {
@@ -795,7 +795,7 @@ inline void GatherInputs()
 inline void UpdateActions()
 {
     if(engine::current_input_mapping == "") {   return;   }
-    icfw_input_mapping current_mapping = engine::input_mappings[engine::current_input_mapping];
+    icfw_input_mapping &current_mapping = engine::input_mappings[engine::current_input_mapping];
 
     for (auto& action : current_mapping.actions)
     {

@@ -46,7 +46,5 @@ int main(void)
     MP_SetMaxFPS(120);
     MP_InitWindow(tick, screenWidth, screenHeight, "raylib [core] example - basic window");
 
-    CloseWindow();        // Close window and OpenGL context
-
     return 0;
 }

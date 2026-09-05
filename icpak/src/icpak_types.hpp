@@ -350,7 +350,7 @@ TEST_CASE("Testing icpak_asset_header serialization") {
 #pragma region PAK index
 struct icpak_index : Serializable
 {
-    u32 block_count;
+    u32 block_count = 0;
     std::vector<u32> block_sizes; // A multiplier of BLOCK_SIZE
     std::vector<sha256_hash> block_hashes;
     std::map<icpak_uuid, icpak_asset_header> asset_map;
@@ -358,13 +358,13 @@ struct icpak_index : Serializable
     // Calculates the offset to a block inside an icpak.
     bool CalculateBlockOffset(u32 block, u64 &result, u32 block_size = BLOCK_SIZE)
     {
-        if(block > block_count) {   return false;   }
+        if(block >= block_count) {   return false;   }
 
         u64 offset = 0;
 
         for(u32 i = 0; i < block; i++)
         {
-            offset += (u64)(block_sizes[i] * block_size);
+            offset += ((u64)block_sizes[i] * (u64)block_size);
         }
 
         result = offset;
@@ -397,7 +397,7 @@ struct icpak_index : Serializable
             ret_val.insert(ret_val.end(), asset_mapping->first.begin(), asset_mapping->first.end()); // UUID
             auto asset_header_bytes = asset_mapping->second.Serialize(); // Asset header
             ret_val.insert(ret_val.end(), asset_header_bytes.begin(), asset_header_bytes.end());
-            std::next(asset_mapping, 1);
+            std::advance(asset_mapping, 1);
         }
 
         return ret_val;
