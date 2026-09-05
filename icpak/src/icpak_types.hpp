@@ -19,6 +19,7 @@
 
 typedef std::uint8_t byte;
 typedef std::uint32_t u32;
+typedef std::uint64_t u64;
 typedef std::array<byte, sizeof(u32)> u32bytes;
 typedef std::uint8_t icpak_asset_type;
 
@@ -350,20 +351,20 @@ TEST_CASE("Testing icpak_asset_header serialization") {
 struct icpak_index : Serializable
 {
     u32 block_count;
-    std::vector<std::uint32_t> block_sizes; // A multiplier of BLOCK_SIZE
+    std::vector<u32> block_sizes; // A multiplier of BLOCK_SIZE
     std::vector<sha256_hash> block_hashes;
     std::map<icpak_uuid, icpak_asset_header> asset_map;
 
     // Calculates the offset to a block inside an icpak.
-    bool CalculateBlockOffset(std::int32_t block, std::uint64_t &result, std::int32_t block_size = BLOCK_SIZE)
+    bool CalculateBlockOffset(u32 block, u64 &result, u32 block_size = BLOCK_SIZE)
     {
         if(block > block_count) {   return false;   }
 
-        std::uint64_t offset = 0;
+        u64 offset = 0;
 
-        for(int i = 0; i < block; i++)
+        for(u32 i = 0; i < block; i++)
         {
-            offset += (std::uint64_t)(block_sizes[i] * block_size);
+            offset += (u64)(block_sizes[i] * block_size);
         }
 
         result = offset;
