@@ -29,10 +29,19 @@ typedef std::uint8_t icpak_asset_type;
 template <typename Dest>
 void CopyBytes(const std::vector<byte>& bytes, u32& used_bytes, u32 copied_byte_count, Dest& target)
 {
+    if(bytes.size() < used_bytes + copied_byte_count)
+    {
+        throw(std::out_of_range("Not enough bytes in vector to copy"));
+        return;
+    }
     std::copy_n(bytes.begin() + used_bytes, copied_byte_count, target.begin());
     used_bytes += copied_byte_count;
 }
 #pragma endregion
+
+
+
+
 
 #pragma region Conversions
 // Big endian
@@ -74,6 +83,7 @@ struct Serializable
     virtual void Deserialize(std::vector<byte> &bytes) = 0;
 };
 
+
 #pragma region SHA256 hash
 // Size of SHA256 hash in bytes
 static constexpr u32 sha256_hash_size = 32;
@@ -98,10 +108,10 @@ struct sha256_hash : virtual Serializable
     {
         if(bytes.size() != sha256_hash_size)
         {
-            throw(std::length_error("Incorrect amount of bytes supplied to dezerialize a sha256:hash"));
+            throw(std::length_error("Incorrect amount of bytes supplied to dezerialize a sha256_hash"));
         }
-
-        std::copy_n(bytes.begin(), sha256_hash_size, hash_bytes.begin());
+        u32 used = 0;
+        CopyBytes(bytes, used, sha256_hash_size, hash_bytes);
     }
 };
 inline const bool operator==(const sha256_hash &lhs, const sha256_hash &rhs)
@@ -109,7 +119,7 @@ inline const bool operator==(const sha256_hash &lhs, const sha256_hash &rhs)
     return std::ranges::equal(lhs.hash_bytes, rhs.hash_bytes);
 }
 #if defined(BUILD_TEST)
-TEST_CASE("Testing hash comparison") {
+TEST_CASE("Testing hash comparison #1") {
     
     sha256_hash hash1;
     sha256_hash hash2;
@@ -121,6 +131,19 @@ TEST_CASE("Testing hash comparison") {
     }
 
     CHECK(hash1 == hash2);
+}
+TEST_CASE("Testing hash comparison #2") {
+    
+    sha256_hash hash1;
+    sha256_hash hash2;
+
+    for(u32 i = 0; i < sha256_hash_size; ++i)
+    {
+        hash1.hash_bytes[i] = i;
+        hash2.hash_bytes[i] = sha256_hash_size - i;
+    }
+
+    CHECK(!(hash1 == hash2));
 }
 TEST_CASE("Testing hash serialization") {
     
@@ -260,6 +283,11 @@ struct icpak_asset_header : virtual Serializable
     }
     void Deserialize(std::vector<byte> &bytes)
     {
+        if(bytes.size() != byte_size())
+        {
+            throw(std::out_of_range("Incorrect number of bytes supplied to deserialize asset header."));
+            return;
+        }
         u32 used_bytes = 0;
 
         asset_type = bytes[used_bytes];
@@ -371,15 +399,18 @@ struct icpak_index : Serializable
         return true;
     }
 
+    static const uint32_t byte_size(u32 block_count)
+    {
+        return (
+            sizeof(block_count)+
+            (sizeof(u32) + sha256_hash_size + icpak_uuid_size + icpak_asset_header::byte_size()) * block_count
+        );
+    }
+
     virtual std::vector<byte> Serialize()
     {
         std::vector<byte> ret_val;
-        ret_val.reserve(
-            sizeof(block_count)+
-            (sizeof(std::uint32_t) * block_sizes.size())+
-            (sha256_hash_size * block_hashes.size())+
-            ((icpak_uuid_size + icpak_asset_header::byte_size()) * asset_map.size())
-        );
+        ret_val.reserve(byte_size(block_count));
 
         u32bytes block_count_bytes = ToByte(block_count);
         ret_val.insert(ret_val.end(), block_count_bytes.begin(), block_count_bytes.end());
@@ -404,17 +435,49 @@ struct icpak_index : Serializable
     }
     virtual void Deserialize(std::vector<byte> &bytes)
     {
+        if(bytes.size() < sizeof(u32))
+        {
+            throw(std::out_of_range("Incorrect amount of bytes supplied to deserialize icpak_index"));
+            return;
+        }
+
         u32 used_bytes = 0;
 
         u32bytes block_count_bytes;
         CopyBytes(bytes, used_bytes, sizeof(u32), block_count_bytes);
         block_count = FromByte(block_count_bytes);
 
-        for (u32 i = 0; i < block_count; i++)
+        if(bytes.size() != byte_size(block_count))
         {
-            
+            throw(std::out_of_range("Incorrect amount of bytes supplied to deserialize icpak_index"));
+            return;
         }
-        
+
+        block_sizes.reserve(block_count);
+        block_hashes.reserve(block_count);
+
+        for (u32 i = 0; i < block_count; ++i)
+        {
+            u32bytes block_size_bytes;
+            CopyBytes(bytes, used_bytes, sizeof(u32), block_size_bytes);
+            block_sizes.push_back(FromByte(block_size_bytes));
+
+            sha256_hash hash = sha256_hash();
+            CopyBytes(bytes, used_bytes, sha256_hash_size, hash.hash_bytes);
+            block_hashes.push_back(hash);
+
+            icpak_uuid uuid = {};
+            CopyBytes(bytes, used_bytes, icpak_uuid_size, uuid);
+            
+            icpak_asset_header header = icpak_asset_header();
+            std::vector<byte> header_bytes(header.byte_size());
+            CopyBytes(bytes, used_bytes, header_bytes.size(), header_bytes);
+            header.Deserialize(header_bytes);
+
+            asset_map[uuid] = header;
+        }
+
+        return;
     }
 };
 #pragma endregion
