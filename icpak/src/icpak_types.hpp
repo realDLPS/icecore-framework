@@ -445,13 +445,19 @@ struct icpak_index : Serializable
 
         u32bytes block_count_bytes;
         CopyBytes(bytes, used_bytes, sizeof(u32), block_count_bytes);
-        block_count = FromByte(block_count_bytes);
+        u32 temp_block_count = FromByte(block_count_bytes);
 
         if(bytes.size() != byte_size(block_count))
         {
             throw(std::out_of_range("Incorrect amount of bytes supplied to deserialize icpak_index"));
             return;
         }
+
+        block_count = temp_block_count;
+        
+        block_sizes.clear();
+        block_hashes.clear();
+        asset_map.clear();
 
         block_sizes.reserve(block_count);
         block_hashes.reserve(block_count);
