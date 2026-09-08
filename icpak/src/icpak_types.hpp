@@ -474,7 +474,7 @@ struct icpak_index : Serializable
         size_t used_bytes = 0;
 
         u32bytes block_count_bytes;
-        CopyBytes(bytes, used_bytes, sizeof(u32), block_count_bytes);
+        ReadBytes<u32bytes>(bytes, used_bytes, block_count_bytes);
         u32 temp_block_count = FromByte(block_count_bytes);
 
         if(bytes.size() != byte_size(block_count))
@@ -495,24 +495,24 @@ struct icpak_index : Serializable
         for (u32 i = 0; i < block_count; ++i)
         {
             u32bytes block_size_bytes;
-            CopyBytes(bytes, used_bytes, sizeof(u32), block_size_bytes);
+            ReadBytes<u32bytes>(bytes, used_bytes, block_size_bytes);
             block_sizes.push_back(FromByte(block_size_bytes));
 
             sha256_hash hash = sha256_hash();
-            CopyBytes(bytes, used_bytes, sha256_hash_size, hash.hash_bytes);
+            hash.Deserialize(bytes.subspan(used_bytes, sha256_hash::byte_size));
+            used_bytes += sha256_hash::byte_size;
             block_hashes.push_back(hash);
 
-            icpak_uuid uuid = {};
-            CopyBytes(bytes, used_bytes, icpak_uuid_size, uuid);
+            icpak_uuid uuid = icpak_uuid();
+            uuid.Deserialize(bytes.subspan(used_bytes, icpak_uuid::byte_size));
+            used_bytes += icpak_uuid::byte_size;
             
             icpak_asset_header header = icpak_asset_header();
-            std::vector<byte> header_bytes(header.byte_size());
-            CopyBytes(bytes, used_bytes, header_bytes.size(), header_bytes);
-            header.Deserialize(header_bytes);
+            header.Deserialize(bytes.subspan(used_bytes, icpak_asset_header::byte_size));
+            used_bytes += icpak_asset_header::byte_size;
 
             asset_map[uuid] = header;
         }
-
         return;
     }
 };
