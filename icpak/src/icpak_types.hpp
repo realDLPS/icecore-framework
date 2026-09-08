@@ -24,6 +24,7 @@ typedef std::uint32_t u32;
 typedef std::uint64_t u64;
 typedef std::array<byte, sizeof(u32)> u32bytes;
 typedef std::uint8_t icpak_asset_type;
+typedef std::span<const byte> byte_span;
 
 #pragma region Helpers
 // Returns false on overflow
@@ -49,16 +50,36 @@ static bool ValidatedMul(size_t a, size_t b, size_t& result)
 // memcpy's sizeof(T) bytes from the provided bytes and
 // updates the offset according to this.
 template <typename T>
-bool ReadBytes(std::span<const byte> bytes, size_t& offset, T &target)
+void ReadBytes(byte_span bytes, size_t& offset, T &target)
 {
+    if(offset > bytes.size())
+    {
+        throw std::overflow_error("Offset is outside of byte size");
+        return;
+    }
     if(sizeof(T) > bytes.size() - offset)
     {
-        return false;
+        throw std::overflow_error("Offset is outside of byte size");
+        return;
     }
     std::memcpy(&target, bytes.data() + offset, sizeof(T));
     offset += sizeof(T);
 
-    return true;
+    return;
+}
+byte_span SafeSubSpan(byte_span &bytes, size_t offset, size_t count)
+{
+    if(offset > bytes.size())
+    {
+        throw std::overflow_error("Offset is outside of byte size");
+        return;
+    }
+    if(count > bytes.size() - offset)
+    {
+        throw std::overflow_error("Offset is outside of byte size");
+        return;
+    }
+    return bytes.subspan(offset, count);
 }
 #pragma endregion
 
@@ -355,10 +376,10 @@ struct icpak_asset_header : virtual Serializable_SK
         ReadBytes<u32bytes>(bytes, used_bytes, size_bytes);
         size = FromByte(size_bytes);
 
-        compressed_hash.Deserialize(bytes.subspan(used_bytes, sha256_hash::byte_size));
+        compressed_hash.Deserialize(SafeSubSpan(bytes, used_bytes, sha256_hash::byte_size));
         used_bytes += sha256_hash_size;
 
-        uncompressed_hash.Deserialize(bytes.subspan(used_bytes, sha256_hash::byte_size));
+        uncompressed_hash.Deserialize(SafeSubSpan(bytes, used_bytes, sha256_hash::byte_size));
         used_bytes += sha256_hash_size;
 
         return;
@@ -429,7 +450,7 @@ struct icpak_index : Serializable
         return true;
     }
 
-    static const uint32_t byte_size(u32 block_count)
+    static const size_t byte_size(u32 block_count)
     {
         return (
             sizeof(block_count)+
@@ -499,16 +520,16 @@ struct icpak_index : Serializable
             block_sizes.push_back(FromByte(block_size_bytes));
 
             sha256_hash hash = sha256_hash();
-            hash.Deserialize(bytes.subspan(used_bytes, sha256_hash::byte_size));
+            hash.Deserialize(SafeSubSpan(bytes, used_bytes, sha256_hash::byte_size));
             used_bytes += sha256_hash::byte_size;
             block_hashes.push_back(hash);
 
             icpak_uuid uuid = icpak_uuid();
-            uuid.Deserialize(bytes.subspan(used_bytes, icpak_uuid::byte_size));
+            uuid.Deserialize(SafeSubSpan(bytes, used_bytes, icpak_uuid::byte_size));
             used_bytes += icpak_uuid::byte_size;
             
             icpak_asset_header header = icpak_asset_header();
-            header.Deserialize(bytes.subspan(used_bytes, icpak_asset_header::byte_size));
+            header.Deserialize(SafeSubSpan(bytes, used_bytes, icpak_asset_header::byte_size));
             used_bytes += icpak_asset_header::byte_size;
 
             asset_map[uuid] = header;
