@@ -67,17 +67,17 @@ void ReadBytes(byte_span bytes, size_t& offset, T &target)
 
     return;
 }
-byte_span SafeSubSpan(byte_span &bytes, size_t offset, size_t count)
+byte_span SafeSubSpan(byte_span bytes, size_t offset, size_t count)
 {
     if(offset > bytes.size())
     {
         throw std::overflow_error("Offset is outside of byte size");
-        return;
+        return byte_span();
     }
     if(count > bytes.size() - offset)
     {
         throw std::overflow_error("Offset is outside of byte size");
-        return;
+        return byte_span();
     }
     return bytes.subspan(offset, count);
 }
@@ -450,7 +450,7 @@ struct icpak_index : Serializable
         return true;
     }
 
-    static const size_t byte_size(u32 block_count)
+    static size_t byte_size(u32 block_count)
     {
         return (
             sizeof(block_count)+
@@ -498,7 +498,7 @@ struct icpak_index : Serializable
         ReadBytes<u32bytes>(bytes, used_bytes, block_count_bytes);
         u32 temp_block_count = FromByte(block_count_bytes);
 
-        if(bytes.size() != byte_size(block_count))
+        if(bytes.size() != byte_size(temp_block_count))
         {
             throw(std::out_of_range("Incorrect amount of bytes supplied to deserialize icpak_index"));
             return;
