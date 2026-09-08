@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <map>
 #include <span>
+#include <limits>
 
 #include <cstdint>
 #include <cstring>
@@ -108,7 +109,7 @@ struct Serializable
 // Serializable "Size known" (SK)
 struct Serializable_SK : Serializable
 {
-    virtual constexpr size_t byte_size() = 0;
+    static constexpr size_t byte_size = 0;
 };
 
 
@@ -124,10 +125,9 @@ struct sha256_hash : virtual Serializable_SK
     {
         data = hash;
     }
-    constexpr size_t byte_size()
-    {
-        return sha256_hash_size;
-    }
+
+    static constexpr size_t byte_size = sha256_hash_size;
+
     std::vector<byte> Serialize()
     {
         return std::vector<byte>(data.begin(), data.end());
@@ -204,10 +204,9 @@ struct icpak_uuid : virtual Serializable_SK
     {
         data = uuid;
     }
-    constexpr size_t byte_size()
-    {
-        return icpak_uuid_size;
-    }
+
+    static constexpr size_t byte_size = icpak_uuid_size;
+
     std::vector<byte> Serialize()
     {
         return std::vector<byte>(data.begin(), data.end());
@@ -258,7 +257,7 @@ struct icpak_asset_header : virtual Serializable_SK
 {
     icpak_asset_header(){};
 
-    icpak_asset_type asset_type = 0; // Optional meta data that the loader (the programmer) may use.
+    icpak_asset_type asset_type = 0; // Optional meta data that the user (the game developer) may use.
     icpak::compression_type compression_type = icpak::UNCOMPRESSED;
     byte asset_flags = 0; // One byte reserved for flag usage. Reservations may be lifted later on.
     /*
@@ -277,27 +276,24 @@ struct icpak_asset_header : virtual Serializable_SK
     u32 compressed_size = 0; // Byte size of the asset when compressed
     u32 size = 0; // Byte size of the asset after decompression
     
-    sha256_hash compressed_hash;
-    sha256_hash uncompressed_hash;
+    sha256_hash compressed_hash = sha256_hash();
+    sha256_hash uncompressed_hash = sha256_hash();
 
-    constexpr size_t byte_size()
-    {
-        return (sizeof(asset_type)+
-            sizeof(compression_type)+
-            sizeof(asset_flags)+
-            sizeof(block)+
-            sizeof(offset)+
-            sizeof(compressed_size)+
-            sizeof(size)+
-            2 * sha256_hash_size);
-    }
+    static constexpr size_t byte_size = (
+        sizeof(asset_type)+
+        sizeof(compression_type)+
+        sizeof(asset_flags)+
+        sizeof(block)+
+        sizeof(offset)+
+        sizeof(compressed_size)+
+        sizeof(size)+
+        2 * sha256_hash_size
+    );
 
     std::vector<byte> Serialize()
     {
         std::vector<byte> ret_val;
-        ret_val.reserve(
-            byte_size()
-        );
+        ret_val.reserve(byte_size);
 
         ret_val.push_back(asset_type);
 
@@ -327,12 +323,12 @@ struct icpak_asset_header : virtual Serializable_SK
     }
     void Deserialize(std::span<const byte> bytes)
     {
-        if(bytes.size() != byte_size())
+        if(bytes.size() != byte_size)
         {
             throw(std::out_of_range("Incorrect number of bytes supplied to deserialize asset header."));
             return;
         }
-        u32 used_bytes = 0;
+        size_t used_bytes = 0;
 
         asset_type = bytes[used_bytes];
         used_bytes += sizeof(asset_type);
@@ -344,35 +340,25 @@ struct icpak_asset_header : virtual Serializable_SK
         used_bytes += sizeof(asset_flags);
 
         u32bytes block_bytes;
-        std::copy(bytes.begin() + used_bytes, bytes.begin() + used_bytes + sizeof(block), block_bytes.begin());
+        ReadBytes<u32bytes>(bytes, used_bytes, block_bytes);
         block = FromByte(block_bytes);
-        used_bytes += sizeof(block);
 
         u32bytes offset_bytes;
-        std::copy(bytes.begin() + used_bytes, bytes.begin() + used_bytes + sizeof(offset), offset_bytes.begin());
+        ReadBytes<u32bytes>(bytes, used_bytes, offset_bytes);
         offset = FromByte(offset_bytes);
-        used_bytes += sizeof(offset);
 
         u32bytes compressed_size_bytes;
-        std::copy(bytes.begin() + used_bytes, bytes.begin() + used_bytes + sizeof(compressed_size), compressed_size_bytes.begin());
+        ReadBytes<u32bytes>(bytes, used_bytes, compressed_size_bytes);
         compressed_size = FromByte(compressed_size_bytes);
-        used_bytes += sizeof(compressed_size);
 
         u32bytes size_bytes;
-        std::copy(bytes.begin() + used_bytes, bytes.begin() + used_bytes + sizeof(size), size_bytes.begin());
+        ReadBytes<u32bytes>(bytes, used_bytes, size_bytes);
         size = FromByte(size_bytes);
-        used_bytes += sizeof(size);
 
-        std::vector<byte> compressed_hash_bytes;
-        compressed_hash_bytes.resize(sha256_hash_size);
-        std::copy(bytes.begin() + used_bytes, bytes.begin() + used_bytes + sha256_hash_size, compressed_hash_bytes.begin());
-        compressed_hash.Deserialize(compressed_hash_bytes);
+        compressed_hash.Deserialize(bytes.subspan(used_bytes, sha256_hash::byte_size));
         used_bytes += sha256_hash_size;
 
-        std::vector<byte> uncompressed_hash_bytes;
-        uncompressed_hash_bytes.resize(sha256_hash_size);
-        std::copy(bytes.begin() + used_bytes, bytes.begin() + used_bytes + sha256_hash_size, uncompressed_hash_bytes.begin());
-        uncompressed_hash.Deserialize(uncompressed_hash_bytes);
+        uncompressed_hash.Deserialize(bytes.subspan(used_bytes, sha256_hash::byte_size));
         used_bytes += sha256_hash_size;
 
         return;
@@ -447,7 +433,7 @@ struct icpak_index : Serializable
     {
         return (
             sizeof(block_count)+
-            (sizeof(u32) + sha256_hash_size + icpak_uuid_size + icpak_asset_header::byte_size()) * block_count
+            (sizeof(u32) + sha256_hash_size + icpak_uuid_size + icpak_asset_header::byte_size) * block_count
         );
     }
 
@@ -469,7 +455,7 @@ struct icpak_index : Serializable
             auto block_hash_bytes = block_hashes[i].Serialize();
             ret_val.insert(ret_val.end(), block_hash_bytes.begin(), block_hash_bytes.end());
 
-            ret_val.insert(ret_val.end(), asset_mapping->first.begin(), asset_mapping->first.end()); // UUID
+            ret_val.insert(ret_val.end(), asset_mapping->first.data.begin(), asset_mapping->first.data.end()); // UUID
             auto asset_header_bytes = asset_mapping->second.Serialize(); // Asset header
             ret_val.insert(ret_val.end(), asset_header_bytes.begin(), asset_header_bytes.end());
             std::advance(asset_mapping, 1);
@@ -485,7 +471,7 @@ struct icpak_index : Serializable
             return;
         }
 
-        u32 used_bytes = 0;
+        size_t used_bytes = 0;
 
         u32bytes block_count_bytes;
         CopyBytes(bytes, used_bytes, sizeof(u32), block_count_bytes);
