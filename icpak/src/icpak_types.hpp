@@ -5,6 +5,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <map>
+#include <span>
 
 #include <cstdint>
 #include <cstring>
@@ -24,18 +25,39 @@ typedef std::array<byte, sizeof(u32)> u32bytes;
 typedef std::uint8_t icpak_asset_type;
 
 #pragma region Helpers
-// Copies bytes from a std::vector<byte> to either std::vector or std::array
-// Updates the used bytes variable.
-template <typename Dest>
-void CopyBytes(const std::vector<byte>& bytes, u32& used_bytes, u32 copied_byte_count, Dest& target)
+// Returns false on overflow
+static bool ValidatedAdd(size_t a, size_t b, size_t& result)
 {
-    if(bytes.size() < used_bytes + copied_byte_count)
+    if(b > std::numeric_limits<size_t>::max() - a)
     {
-        throw(std::out_of_range("Not enough bytes in vector to copy"));
-        return;
+        return false;
     }
-    std::copy_n(bytes.begin() + used_bytes, copied_byte_count, target.begin());
-    used_bytes += copied_byte_count;
+    result = a + b;
+    return true;
+}
+// Returns false on overflow
+static bool ValidatedMul(size_t a, size_t b, size_t& result)
+{
+    if(b > std::numeric_limits<size_t>::max() / a)
+    {
+        return false;
+    }
+    result = a * b;
+    return true;
+}
+// memcpy's sizeof(T) bytes from the provided bytes and
+// updates the offset according to this.
+template <typename T>
+bool ReadBytes(std::span<const byte> bytes, size_t& offset, T &target)
+{
+    if(sizeof(T) > bytes.size() - offset)
+    {
+        return false;
+    }
+    std::memcpy(&target, bytes.data() + offset, sizeof(T));
+    offset += sizeof(T);
+
+    return true;
 }
 #pragma endregion
 
@@ -80,43 +102,45 @@ TEST_CASE("Testing byte conversions") {
 struct Serializable
 {
     virtual std::vector<byte> Serialize() = 0;
-    virtual void Deserialize(std::vector<byte> &bytes) = 0;
+    virtual void Deserialize(std::span<const byte> bytes) = 0;
+};
+// Serializable data-type that has its size known at compile time
+// Serializable "Size known" (SK)
+struct Serializable_SK : Serializable
+{
+    virtual constexpr size_t byte_size() = 0;
 };
 
 
 #pragma region SHA256 hash
 // Size of SHA256 hash in bytes
-static constexpr u32 sha256_hash_size = 32;
-struct sha256_hash : virtual Serializable
+static constexpr size_t sha256_hash_size = 32;
+struct sha256_hash : virtual Serializable_SK
 {
-    std::array<byte, sha256_hash_size> hash_bytes = {0};
+    std::array<byte, sha256_hash_size> data = {0};
 
     sha256_hash(){};
     sha256_hash(std::array<byte, sha256_hash_size> hash)
     {
-        hash_bytes = hash;
+        data = hash;
     }
-    static const uint32_t byte_size()
+    constexpr size_t byte_size()
     {
         return sha256_hash_size;
     }
     std::vector<byte> Serialize()
     {
-        return std::vector<byte>(hash_bytes.begin(), hash_bytes.end());
+        return std::vector<byte>(data.begin(), data.end());
     }
-    void Deserialize(std::vector<byte> &bytes)
+    void Deserialize(std::span<const byte> bytes)
     {
-        if(bytes.size() != sha256_hash_size)
-        {
-            throw(std::length_error("Incorrect amount of bytes supplied to dezerialize a sha256_hash"));
-        }
-        u32 used = 0;
-        CopyBytes(bytes, used, sha256_hash_size, hash_bytes);
+        size_t used = 0;
+        ReadBytes<std::array<byte, sha256_hash_size>>(bytes, used, data);
     }
 };
 inline const bool operator==(const sha256_hash &lhs, const sha256_hash &rhs)
 {
-    return std::ranges::equal(lhs.hash_bytes, rhs.hash_bytes);
+    return std::ranges::equal(lhs.data, rhs.data);
 }
 #if defined(BUILD_TEST)
 TEST_CASE("Testing hash comparison #1") {
@@ -172,11 +196,31 @@ TEST_CASE("Testing hash serialization") {
 #pragma region UUID
 // Size of a ICPAK UUID in bytes
 static constexpr u32 icpak_uuid_size = 16;
-typedef std::array<byte, icpak_uuid_size> icpak_uuid;
-
+struct icpak_uuid : virtual Serializable_SK
+{
+    std::array<byte, icpak_uuid_size> data = {0};
+    icpak_uuid(){};
+    icpak_uuid(std::array<byte, icpak_uuid_size> uuid)
+    {
+        data = uuid;
+    }
+    constexpr size_t byte_size()
+    {
+        return icpak_uuid_size;
+    }
+    std::vector<byte> Serialize()
+    {
+        return std::vector<byte>(data.begin(), data.end());
+    }
+    void Deserialize(std::span<const byte> bytes)
+    {
+        size_t offset = 0;
+        ReadBytes<std::array<byte, icpak_uuid_size>>(bytes, offset, data);
+    }
+};
 inline const bool operator==(const icpak_uuid &lhs, const icpak_uuid &rhs)
 {
-    return std::ranges::equal(lhs, rhs);
+    return std::ranges::equal(lhs.data, rhs.data);
 }
 
 #if defined(BUILD_TEST)
@@ -210,7 +254,7 @@ enum compression_type : byte
 }
 
 #pragma region Asset header
-struct icpak_asset_header : virtual Serializable
+struct icpak_asset_header : virtual Serializable_SK
 {
     icpak_asset_header(){};
 
@@ -236,7 +280,7 @@ struct icpak_asset_header : virtual Serializable
     sha256_hash compressed_hash;
     sha256_hash uncompressed_hash;
 
-    static const uint32_t byte_size()
+    constexpr size_t byte_size()
     {
         return (sizeof(asset_type)+
             sizeof(compression_type)+
@@ -281,7 +325,7 @@ struct icpak_asset_header : virtual Serializable
 
         return ret_val;
     }
-    void Deserialize(std::vector<byte> &bytes)
+    void Deserialize(std::span<const byte> bytes)
     {
         if(bytes.size() != byte_size())
         {
@@ -407,7 +451,7 @@ struct icpak_index : Serializable
         );
     }
 
-    virtual std::vector<byte> Serialize()
+    std::vector<byte> Serialize()
     {
         std::vector<byte> ret_val;
         ret_val.reserve(byte_size(block_count));
@@ -433,7 +477,7 @@ struct icpak_index : Serializable
 
         return ret_val;
     }
-    virtual void Deserialize(std::vector<byte> &bytes)
+    void Deserialize(std::span<const byte> bytes)
     {
         if(bytes.size() < sizeof(u32))
         {
