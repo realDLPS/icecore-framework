@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <cstring>
 
-#define BUILD_TEST
+//#define BUILD_TEST
 
 #if defined(BUILD_TEST)
 #include "../../doctest/doctest/doctest.h"
@@ -258,6 +258,11 @@ struct icpak_uuid : virtual Serializable_SK
     {
         size_t offset = 0;
         ReadBytes<std::array<byte, icpak_uuid_size>>(bytes, offset, data);
+    }
+
+    bool operator<(const icpak_uuid& other) const
+    {
+        return data < other.data;
     }
 };
 inline const bool operator==(const icpak_uuid &lhs, const icpak_uuid &rhs)
