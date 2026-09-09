@@ -19,6 +19,21 @@
 #define BLOCK_SIZE 1048576 // 1 MiB, you may specify another size by defining yourself.
 #endif
 
+#ifndef ICPAK_MAX_BLOCK_COUNT
+// With the default block size of 1 MiB this means that a PAK can hold 16 GiB. Though with variable sized blocks it could be higher.
+// For example the maximum block size is effectively 4 GiB due to 32 bit offsets, so the pak could in theory hold 64 TiB, which is silly :D
+//
+// You may specify another count by defining this yourself.
+#define ICPAK_MAX_BLOCK_COUNT 16384
+#endif
+
+#ifndef ICPAK_MAX_ASSET_COUNT
+// No real logic to this, 8 388 608 just seemed like enough assets for a single pak.
+//
+// You may specify another count by defining this yourself.
+#define ICPAK_MAX_ASSET_COUNT 8388608 
+#endif
+
 typedef std::uint8_t byte;
 typedef std::uint32_t u32;
 typedef std::uint64_t u64;
@@ -40,6 +55,11 @@ static bool ValidatedAdd(size_t a, size_t b, size_t& result)
 // Returns false on overflow
 static bool ValidatedMul(size_t a, size_t b, size_t& result)
 {
+    if(a == 0)
+    {
+        result = 0;
+        return true;
+    }
     if(b > std::numeric_limits<size_t>::max() / a)
     {
         return false;
@@ -123,7 +143,7 @@ TEST_CASE("Testing byte conversions") {
 // Data-type that can be serialized and deserialized to/from bytes.
 struct Serializable
 {
-    virtual std::vector<byte> Serialize() = 0;
+    virtual std::vector<byte> Serialize() const = 0;
     virtual void Deserialize(std::span<const byte> bytes) = 0;
 };
 // Serializable data-type that has its size known at compile time
@@ -149,7 +169,7 @@ struct sha256_hash : virtual Serializable_SK
 
     static constexpr size_t byte_size = sha256_hash_size;
 
-    std::vector<byte> Serialize()
+    std::vector<byte> Serialize() const
     {
         return std::vector<byte>(data.begin(), data.end());
     }
@@ -228,7 +248,7 @@ struct icpak_uuid : virtual Serializable_SK
 
     static constexpr size_t byte_size = icpak_uuid_size;
 
-    std::vector<byte> Serialize()
+    std::vector<byte> Serialize() const
     {
         return std::vector<byte>(data.begin(), data.end());
     }
@@ -311,7 +331,7 @@ struct icpak_asset_header : virtual Serializable_SK
         2 * sha256_hash_size
     );
 
-    std::vector<byte> Serialize()
+    std::vector<byte> Serialize() const
     {
         std::vector<byte> ret_val;
         ret_val.reserve(byte_size);
@@ -429,66 +449,115 @@ TEST_CASE("Testing icpak_asset_header serialization") {
 #pragma region PAK index
 struct icpak_index : Serializable
 {
-    u32 block_count = 0;
-    std::vector<u32> block_sizes; // A multiplier of BLOCK_SIZE
-    std::vector<sha256_hash> block_hashes;
+    std::vector<std::pair<u32, sha256_hash>> blocks; // u32 being block size, a multiplier of BLOCK_SIZE, sha256_hash being the block hash
     std::map<icpak_uuid, icpak_asset_header> asset_map;
 
     // Calculates the offset to a block inside an icpak.
-    bool CalculateBlockOffset(u32 block, u64 &result, u32 block_size = BLOCK_SIZE)
+    bool CalculateBlockOffset(u32 block, size_t &result, u32 block_size = BLOCK_SIZE)
     {
-        if(block >= block_count) {   return false;   }
+        if(block >= blocks.size()) {   return false;   }
 
-        u64 offset = 0;
+        size_t offset = 0;
 
-        for(u32 i = 0; i < block; i++)
+        for(u32 i = 0; i < block; ++i)
         {
-            offset += ((u64)block_sizes[i] * (u64)block_size);
+            size_t cur = 0;
+            if(!ValidatedMul((size_t)blocks[i].first, (size_t)block_size, cur))
+            {
+                return false;
+            }
+
+            size_t new_offset = 0;
+            if(!ValidatedAdd(offset, cur, new_offset))
+            {
+                return false;
+            }
+
+            offset = new_offset;
         }
 
         result = offset;
         return true;
     }
 
-    static size_t byte_size(u32 block_count)
+    static size_t byte_size(u32 block_count, u32 asset_count)
     {
-        return (
-            sizeof(block_count)+
-            (sizeof(u32) + sha256_hash_size + icpak_uuid_size + icpak_asset_header::byte_size) * block_count
-        );
+        const size_t block_entry_size = sizeof(u32) + sha256_hash::byte_size;
+        const size_t asset_entry_size = icpak_uuid::byte_size + icpak_asset_header::byte_size;
+        
+        size_t blocks_total = 0;
+        if(!ValidatedMul(block_entry_size, (size_t)block_count, blocks_total))
+        {
+            throw std::overflow_error("Block count is too large. icpak_index byte_size overflowed");
+        }
+
+        size_t assets_total = 0;
+        if(!ValidatedMul(asset_entry_size, (size_t)asset_count, assets_total))
+        {
+            throw std::overflow_error("Asset count is too large. icpak_index byte_size overflowed");
+        }
+
+        // This is the byte size of the two count fields at the start.
+        size_t header_size = 0;
+        if(!ValidatedAdd(sizeof(u32), sizeof(u32), header_size))
+        {
+            throw std::overflow_error("Cannot compute byte size. icpak_index byte_size overflowed");
+        }
+
+        size_t partial_result = 0;
+        if(!ValidatedAdd(header_size, blocks_total, partial_result))
+        {
+            throw std::overflow_error("Block count is too large. icpak_index byte_size overflowed");
+        }
+
+        size_t result = 0;
+        if(!ValidatedAdd(partial_result, assets_total, result))
+        {
+            throw std::overflow_error("Asset count is too large. icpak_index byte_size overflowed");
+        }
+
+        return result;
     }
 
-    std::vector<byte> Serialize()
+    std::vector<byte> Serialize() const
     {
+        u32 block_count = (u32)blocks.size();
+        u32 asset_count = (u32)asset_map.size();
+
         std::vector<byte> ret_val;
-        ret_val.reserve(byte_size(block_count));
+        ret_val.reserve(byte_size(block_count, asset_count));
 
         u32bytes block_count_bytes = ToByte(block_count);
         ret_val.insert(ret_val.end(), block_count_bytes.begin(), block_count_bytes.end());
 
-        auto asset_mapping = asset_map.begin();
+        u32bytes asset_count_bytes = ToByte(asset_count);
+        ret_val.insert(ret_val.end(), asset_count_bytes.begin(), asset_count_bytes.end());
 
-        for (u32 i = 0; i < block_count; ++i)
+        for(auto& block : blocks)
         {
-            u32bytes block_size_bytes = ToByte(block_sizes[i]);
+            u32bytes block_size_bytes = ToByte(block.first);
             ret_val.insert(ret_val.end(), block_size_bytes.begin(), block_size_bytes.end());
 
-            auto block_hash_bytes = block_hashes[i].Serialize();
+            auto block_hash_bytes = block.second.Serialize();
             ret_val.insert(ret_val.end(), block_hash_bytes.begin(), block_hash_bytes.end());
+        }
 
-            ret_val.insert(ret_val.end(), asset_mapping->first.data.begin(), asset_mapping->first.data.end()); // UUID
-            auto asset_header_bytes = asset_mapping->second.Serialize(); // Asset header
+        for(auto& asset : asset_map)
+        {
+            auto uuid_bytes = asset.first.Serialize();
+            ret_val.insert(ret_val.end(), uuid_bytes.begin(), uuid_bytes.end());
+
+            auto asset_header_bytes = asset.second.Serialize();
             ret_val.insert(ret_val.end(), asset_header_bytes.begin(), asset_header_bytes.end());
-            std::advance(asset_mapping, 1);
         }
 
         return ret_val;
     }
     void Deserialize(std::span<const byte> bytes)
     {
-        if(bytes.size() < sizeof(u32))
+        if(bytes.size() < sizeof(u32) * 2) // Two counts at the start
         {
-            throw(std::out_of_range("Incorrect amount of bytes supplied to deserialize icpak_index"));
+            throw std::out_of_range("Incorrect amount of bytes supplied to deserialize icpak_index");
             return;
         }
 
@@ -496,44 +565,59 @@ struct icpak_index : Serializable
 
         u32bytes block_count_bytes;
         ReadBytes<u32bytes>(bytes, used_bytes, block_count_bytes);
-        u32 temp_block_count = FromByte(block_count_bytes);
+        u32 block_count = FromByte(block_count_bytes);
 
-        if(bytes.size() != byte_size(temp_block_count))
+        u32bytes asset_count_bytes;
+        ReadBytes<u32bytes>(bytes, used_bytes, asset_count_bytes);
+        u32 asset_count = FromByte(asset_count_bytes);
+
+        if(block_count > ICPAK_MAX_BLOCK_COUNT)
+        {
+            throw std::out_of_range("Block count is larger than allowed maximum");
+        }
+
+        if(asset_count > ICPAK_MAX_ASSET_COUNT)
+        {
+            throw std::out_of_range("Asset count is larger than allowed maximum");
+        }
+
+        if(bytes.size() != byte_size(block_count, asset_count))
         {
             throw(std::out_of_range("Incorrect amount of bytes supplied to deserialize icpak_index"));
             return;
         }
-
-        block_count = temp_block_count;
         
-        block_sizes.clear();
-        block_hashes.clear();
+        blocks.clear();
         asset_map.clear();
 
-        block_sizes.reserve(block_count);
-        block_hashes.reserve(block_count);
+        blocks.reserve(block_count);
 
-        for (u32 i = 0; i < block_count; ++i)
+        for(u32 i = 0; i < block_count; ++i)
         {
             u32bytes block_size_bytes;
             ReadBytes<u32bytes>(bytes, used_bytes, block_size_bytes);
-            block_sizes.push_back(FromByte(block_size_bytes));
+            u32 block_size = FromByte(block_size_bytes);
 
             sha256_hash hash = sha256_hash();
             hash.Deserialize(SafeSubSpan(bytes, used_bytes, sha256_hash::byte_size));
             used_bytes += sha256_hash::byte_size;
-            block_hashes.push_back(hash);
 
-            icpak_uuid uuid = icpak_uuid();
+            blocks.push_back(std::make_pair(block_size, hash));
+        }
+
+        for(u32 i = 0; i < asset_count; ++i)
+        {
+            auto uuid = icpak_uuid();
             uuid.Deserialize(SafeSubSpan(bytes, used_bytes, icpak_uuid::byte_size));
             used_bytes += icpak_uuid::byte_size;
-            
-            icpak_asset_header header = icpak_asset_header();
+
+            auto header = icpak_asset_header();
             header.Deserialize(SafeSubSpan(bytes, used_bytes, icpak_asset_header::byte_size));
             used_bytes += icpak_asset_header::byte_size;
 
             asset_map[uuid] = header;
         }
+
         return;
     }
 };
