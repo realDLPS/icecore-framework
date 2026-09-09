@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <cstring>
 
+#define BUILD_TEST
+
 #if defined(BUILD_TEST)
 #include "../../doctest/doctest/doctest.h"
 #endif
@@ -191,8 +193,8 @@ TEST_CASE("Testing hash comparison #1") {
 
     for(u32 i = 0; i < sha256_hash_size; ++i)
     {
-        hash1.hash_bytes[i] = i;
-        hash2.hash_bytes[i] = i;
+        hash1.data[i] = i;
+        hash2.data[i] = i;
     }
 
     CHECK(hash1 == hash2);
@@ -204,8 +206,8 @@ TEST_CASE("Testing hash comparison #2") {
 
     for(u32 i = 0; i < sha256_hash_size; ++i)
     {
-        hash1.hash_bytes[i] = i;
-        hash2.hash_bytes[i] = sha256_hash_size - i;
+        hash1.data[i] = i;
+        hash2.data[i] = sha256_hash_size - i;
     }
 
     CHECK(!(hash1 == hash2));
@@ -216,7 +218,7 @@ TEST_CASE("Testing hash serialization") {
 
     for(u32 i = 0; i < sha256_hash_size; ++i)
     {
-        hash1.hash_bytes[i] = i;
+        hash1.data[i] = i;
     }
 
     auto bytes = hash1.Serialize();
@@ -270,8 +272,8 @@ TEST_CASE("Checking UUID comparison") {
 
     for(u32 i = 0; i < icpak_uuid_size; ++i)
     {
-        uuid1[i] = i;
-        uuid2[i] = i;
+        uuid1.data[i] = i;
+        uuid2.data[i] = i;
     }
 
     CHECK(uuid1 == uuid2);
@@ -430,8 +432,8 @@ TEST_CASE("Testing icpak_asset_header serialization") {
     icpak_asset_header original = icpak_asset_header();
     original.asset_type = 3;
     original.asset_flags = 2;
-    original.compressed_hash.hash_bytes = {1};
-    original.uncompressed_hash.hash_bytes = {2};
+    original.compressed_hash.data = {1};
+    original.uncompressed_hash.data = {2};
 
     auto bytes = original.Serialize();
     icpak_asset_header converted = icpak_asset_header();
