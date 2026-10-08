@@ -8,11 +8,7 @@
 #include <stdexcept>
 #include <cctype>
 
-#define TOC_VERSION 1
-#define ICPAK_VERSION 1
-#define ICPAK_INDEX_VERSION 1
-#define ICPAK_ASSET_VERSION 1
-#define ICPAK_ASSET_HEADER_VERSION 1
+
 
 struct paker_ctx
 {

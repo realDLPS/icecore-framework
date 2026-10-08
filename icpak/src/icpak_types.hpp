@@ -30,11 +30,17 @@
 #endif
 
 #ifndef ICPAK_MAX_ASSET_COUNT
-// No real logic to this, 8 388 608 just seemed like enough assets for a single pak.
+// No real logic to this, 16384 just seemed like enough assets for a single pak as a default.
 //
 // You may specify another count by defining this yourself.
-#define ICPAK_MAX_ASSET_COUNT 8388608 
+#define ICPAK_MAX_ASSET_COUNT 16384 
 #endif
+
+#define TOC_VERSION 0
+#define ICPAK_VERSION 0
+#define ICPAK_INDEX_VERSION 0
+#define ICPAK_ASSET_VERSION 0
+#define ICPAK_ASSET_HEADER_VERSION 0
 
 typedef std::uint8_t byte;
 typedef std::uint32_t u32;
@@ -629,4 +635,47 @@ struct icpak_index : Serializable
     }
 };
 #pragma endregion
+
+
+
+
+
+#pragma region Table of contents
+struct ICPAK_TOC : Serializable
+{
+    /* Version information */
+    // Before version 1 these will be set to 0 regardless of changes.
+    u32 toc_version = 0;
+    u32 icpak_version = 0;
+    u32 icpak_index_version = 0;
+    u32 asset_format_version = 0;
+    u32 asset_header_version = 0;
+    
+    u32 toc_block_size = 0; // How large the blocks were when this toc was made.
+
+    std::map<std::string, sha256_hash> icpak_index_hashes = std::map<std::string, sha256_hash>();
+    std::map<icpak_uuid, std::string> asset_locations = std::map<icpak_uuid, std::string>();
+
+    std::vector<byte> Serialize() const
+    {
+
+    }
+    void Deserialize(std::span<const byte> bytes)
+    {
+
+    }
+};
+#if defined(BUILD_TEST)
+TEST_CASE("Testing that none of the toc versions are 0") {
+    CHECK(TOC_VERSION != 0);
+    CHECK(ICPAK_VERSION != 0);
+    CHECK(ICPAK_INDEX_VERSION != 0);
+    CHECK(ICPAK_ASSET_VERSION != 0);
+    CHECK(ICPAK_ASSET_HEADER_VERSION != 0);
+    // This test is expected to fail until version 1.
+}
+#endif
+
+#pragma endregion
+
 #pragma endregion
