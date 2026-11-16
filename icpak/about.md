@@ -119,12 +119,7 @@ This is very much a work in progress file about my thoughts on how to do a syste
 - Holds information about assets in the depot
 - Map of asset uuids to asset hashes
     - This is used to detect when an asset has changed
-- Holds block-buddy information
 - Only used by the packer and not included in builds.
-
-## Block-buddy
-- Holds a list of uuids beloging in the same block
-- Upon each packing the packer checks how many of the assets in the block are still alive and if the block should be purged.
 
 
 # File structure
@@ -163,7 +158,15 @@ Spent 2ish weeks with the 1st iteration, now defining how I want to proceed.
 
 ## Definitions:
 - ICPAK: Refers to this project.
-- ICPAKER (or packer): The editor/packing utility of ICPAK. This will primarily target Windows.
+- ICPAKER (or packer/paker): The editor/packing utility of ICPAK. This will primarily target Windows.
+
+## New features to support:
+- Signing for the TOC (in turn signing everything)
+- Web build mode which disables storing any dead bytes in favour of making builds as small as possible.
+
+## "Deprecations"
+- Block buddies
+    - Replaced by blocks being immutable
 
 ## Runtime Formats
 - .toc: Table of contents

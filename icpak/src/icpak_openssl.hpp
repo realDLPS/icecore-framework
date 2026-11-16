@@ -13,7 +13,7 @@
 sha256_hash sha256(std::span<const std::uint8_t> bytes)
 {
     sha256_hash hash;
-    SHA256(bytes.data(), bytes.size(), hash.hash_bytes.data());
+    SHA256(bytes.data(), bytes.size(), hash.data.data());
     return hash;
 }
 
@@ -43,10 +43,10 @@ public:
 
 namespace icpak
 {
-    icpak_uuid generate_uuid()
+    inline icpak_uuid generate_uuid()
     {
         icpak_uuid uuid;
-        RAND_bytes(uuid.data(), uuid.size());
+        RAND_bytes(uuid.data.data(), uuid.byte_size);
         return uuid;
     }
 }
