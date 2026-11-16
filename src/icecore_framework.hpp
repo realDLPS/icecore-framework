@@ -377,8 +377,12 @@ inline void DrawQueue(icfw_draw_queue &draw_queue, icfw_camera &camera, RenderTe
 #include <functional>
 #include <variant>
 #include <unordered_set>
-#include <algorithm>
 #include <unordered_map>
+#include <algorithm>
+#include <optional>
+#include <memory>
+#include <cmath>
+#include <stdexcept>
 
 enum icfw_input_mode
 {
@@ -390,7 +394,6 @@ enum icfw_input_mode
     ui_game = 5, // Prioritise ui over game
 #endif
 };
-
 
 enum icfw_input_value_type
 {
@@ -413,8 +416,8 @@ enum icfw_mouse_inputs
     mouse_forward = 4,
     mouse_back = 5,
     mouse_side = 6,
-    mouse_extra = 7,
-    mouse_scroll = 8,
+    mouse_extra = 7,   // last button
+    mouse_scroll = 8,  // first axis
     mouse_x = 9,
     mouse_y = 10,
 };
@@ -437,223 +440,253 @@ enum icfw_gamepad_inputs
     gamepad_button_middle = 15,
     gamepad_button_middle_right = 16,
     gamepad_button_left_thumb = 17,
-    gamepad_button_right_thumb = 18,
-    gamepad_axis_left_x = 19,
+    gamepad_button_right_thumb = 18,   // last button
+    gamepad_axis_left_x = 19,          // first axis
     gamepad_axis_left_y = 20,
     gamepad_axis_right_x = 21,
     gamepad_axis_right_y = 22,
     gamepad_axis_left_trigger = 23,
     gamepad_axis_right_trigger = 24,
 };
-namespace engine{
-    // Mappings of icfw mouse & gamepad inputs to raylib mouse & gamepad inputs
-    static int mouse_mapping[7] = {MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_BACK, MOUSE_BUTTON_SIDE, MOUSE_BUTTON_EXTRA};
-    static int gamepad_mapping[24] = {GAMEPAD_BUTTON_UNKNOWN, GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT, GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT, GAMEPAD_BUTTON_RIGHT_FACE_UP, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_LEFT_TRIGGER_1, GAMEPAD_BUTTON_LEFT_TRIGGER_2, GAMEPAD_BUTTON_RIGHT_TRIGGER_1, GAMEPAD_BUTTON_RIGHT_TRIGGER_2, GAMEPAD_BUTTON_MIDDLE_LEFT, GAMEPAD_BUTTON_MIDDLE, GAMEPAD_BUTTON_MIDDLE_RIGHT, GAMEPAD_BUTTON_LEFT_THUMB, GAMEPAD_BUTTON_RIGHT_THUMB, GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y, GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y, GAMEPAD_AXIS_LEFT_TRIGGER, GAMEPAD_AXIS_RIGHT_TRIGGER};
+
+namespace engine {
+    // Mappings of icfw mouse & gamepad inputs to raylib mouse & gamepad inputs.
+    // All engine state is keyed by the icfw enum, raylib ids are only used when calling raylib
+    inline constexpr int mouse_mapping[7] = {MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_BACK, MOUSE_BUTTON_SIDE, MOUSE_BUTTON_EXTRA};
+    inline constexpr int gamepad_mapping[24] = {GAMEPAD_BUTTON_UNKNOWN, GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT, GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT, GAMEPAD_BUTTON_RIGHT_FACE_UP, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_LEFT_TRIGGER_1, GAMEPAD_BUTTON_LEFT_TRIGGER_2, GAMEPAD_BUTTON_RIGHT_TRIGGER_1, GAMEPAD_BUTTON_RIGHT_TRIGGER_2, GAMEPAD_BUTTON_MIDDLE_LEFT, GAMEPAD_BUTTON_MIDDLE, GAMEPAD_BUTTON_MIDDLE_RIGHT, GAMEPAD_BUTTON_LEFT_THUMB, GAMEPAD_BUTTON_RIGHT_THUMB, GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y, GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y, GAMEPAD_AXIS_LEFT_TRIGGER, GAMEPAD_AXIS_RIGHT_TRIGGER};
     inline int ToRaylib(icfw_mouse_inputs m)   { return mouse_mapping[m - 1]; }
     inline int ToRaylib(icfw_gamepad_inputs g) { return gamepad_mapping[g - 1]; }
-}
 
+    inline bool IsMouseButton(int m)   { return m >= mouse_left && m <= mouse_extra; }
+    inline bool IsGamepadButton(int g) { return g >= gamepad_button_unknown && g <= gamepad_button_right_thumb; }
+}
 
 struct icfw_input_mapping; // Forward declare
 struct icfw_input_state
 {
-    std::unordered_map<int, bool> keyboard_buttons = std::unordered_map<int, bool>();
-    std::unordered_map<int, bool> mouse_buttons = std::unordered_map<int, bool>();
-    std::unordered_map<int, float> mouse_axis = std::unordered_map<int, float>();
-    std::unordered_map<int, bool> gamepad_buttons = std::unordered_map<int, bool>();
-    std::unordered_map<int, float> gamepad_axis = std::unordered_map<int, float>();
+    // Key: raylib KeyboardKey
+    std::unordered_map<int, bool> keyboard_buttons;
+    // Key: icfw_mouse_inputs
+    std::unordered_map<int, bool> mouse_buttons;
+    // Key: icfw_mouse_inputs
+    std::unordered_map<int, float> mouse_axis;
+    // Key: icfw_gamepad_inputs
+    std::unordered_map<int, bool> gamepad_buttons;
+    // Key: icfw_gamepad_inputs
+    std::unordered_map<int, float> gamepad_axis;
+    Vector2 mouse_position = {0.0f, 0.0f};
 };
 
 namespace engine {
-    inline std::map<std::string, icfw_input_mapping> input_mappings = std::map<std::string, icfw_input_mapping>();
+    inline std::map<std::string, icfw_input_mapping> input_mappings;
     inline std::string current_input_mapping = "";
     inline icfw_input_mode input_mode = icfw_input_mode::game;
+    inline std::optional<std::string> pending_mapping;
 
     // These are updated any time input mapping is changed
-    inline std::optional<std::string> pending_mapping;
-    inline std::vector<int> keyboard_buttons_to_gather = std::vector<int>();
-    inline std::vector<int> mouse_buttons_to_gather = std::vector<int>();
-    inline std::vector<int> mouse_axis_to_gather = std::vector<int>();
-    inline std::vector<int> gamepad_buttons_to_gather = std::vector<int>();
-    inline std::vector<int> gamepad_axis_to_gather = std::vector<int>();
+    inline std::vector<int> keyboard_buttons_to_gather;
+    inline std::vector<int> mouse_buttons_to_gather;
+    inline std::vector<int> mouse_axis_to_gather;
+    inline std::vector<int> gamepad_buttons_to_gather;
+    inline std::vector<int> gamepad_axis_to_gather;
 
     // These are updated each frame
-    inline icfw_input_state current_state = icfw_input_state();
+    inline icfw_input_state current_state;
 
-    inline std::unordered_set<int> consumed_keyboard_buttons = std::unordered_set<int>();
-    inline std::unordered_set<int> consumed_mouse_buttons = std::unordered_set<int>();
-    inline std::unordered_set<int> consumed_mouse_axis = std::unordered_set<int>();
-    inline std::unordered_set<int> consumed_gamepad_buttons = std::unordered_set<int>();
-    inline std::unordered_set<int> consumed_gamepad_axis = std::unordered_set<int>();
+    // Consumed inputs, mapped to whatever consumed them (an action, or the UI)
+    // Only the owner keeps getting the input
+    inline std::unordered_map<int, const void*> consumed_keyboard_buttons;
+    inline std::unordered_map<int, const void*> consumed_mouse_buttons;
+    inline std::unordered_map<int, const void*> consumed_mouse_axis;
+    inline std::unordered_map<int, const void*> consumed_gamepad_buttons;
+    inline std::unordered_map<int, const void*> consumed_gamepad_axis;
+
+    // Owner token the UI uses when consuming input
+    inline const char ui_owner = 0;
+
+    // True if the asker is allowed to read this input. The first consumer keeps ownership until release
+    inline bool IsAvailable(const std::unordered_map<int, const void*>& consumed, int key, const void* asker)
+    {
+        auto it = consumed.find(key);
+        return it == consumed.end() || it->second == asker;
+    }
+    inline void Consume(std::unordered_map<int, const void*>& consumed, int key, const void* owner)
+    {
+        consumed.try_emplace(key, owner);
+    }
+
+    inline bool IsUIMode(icfw_input_mode mode)
+    {
+#if defined(ICFW_UI)
+        return mode == icfw_input_mode::ui || mode == icfw_input_mode::game_ui || mode == icfw_input_mode::ui_game;
+#else
+        return false;
+#endif
+    }
+
+    // Removes duplicate integers from a vector
+    inline void RemoveDuplicates(std::vector<int> &v)
+    {
+        std::unordered_set<int> seen;
+        v.erase(std::remove_if(v.begin(), v.end(), [&](int x) { return !seen.insert(x).second; }), v.end());
+    }
 }
+
+struct icfw_trigger_value
+{
+    bool consumed = false;
+    float value = 0.0f;
+};
 
 struct icfw_input_trigger
 {
     int index = 0;
     float multiplier = 1.0f;
-    // Returns true if input is consumed
-    virtual std::tuple<bool, float> GetValue()
-    {
-        return {false, 0.0f};
-    }
-    virtual void Consume()
-    {
-        return;
-    }
+
+    virtual ~icfw_input_trigger() = default;
+    // `asker` is the action reading the value, it still receives inputs it consumed itself
+    virtual icfw_trigger_value GetValue(const void* asker) { return {}; }
+    virtual void Consume(const void* owner) {}
+    // Adds the input this trigger reads to the gather lists
+    virtual void Register() {}
 };
+
 struct icfw_keyboard_trigger : icfw_input_trigger
 {
-    
-    std::tuple<bool, float> GetValue()
+    icfw_trigger_value GetValue(const void* asker) override
     {
-        if(!engine::consumed_keyboard_buttons.contains(index))
-        {
-            return {false, engine::current_state.keyboard_buttons[index] ? multiplier : 0.0f};
-        }
-        else
-        {
-            return {true, 0.0f};
-        }
+        if(!engine::IsAvailable(engine::consumed_keyboard_buttons, index, asker)) { return {true, 0.0f}; }
+        return {false, engine::current_state.keyboard_buttons[index] ? multiplier : 0.0f};
     }
-    void Consume()
+    void Consume(const void* owner) override
     {
-        engine::consumed_keyboard_buttons.insert(index);
+        engine::Consume(engine::consumed_keyboard_buttons, index, owner);
+    }
+    void Register() override
+    {
+        engine::keyboard_buttons_to_gather.push_back(index);
     }
 };
-static std::shared_ptr<icfw_input_trigger> KEYBOARD_TRIGGER(KeyboardKey key, float multiplier = 1.0f)
+inline std::shared_ptr<icfw_input_trigger> KEYBOARD_TRIGGER(KeyboardKey key, float multiplier = 1.0f)
 {
     auto a = std::make_shared<icfw_keyboard_trigger>();
-    a.get()->index = key;
-    a.get()->multiplier = multiplier;
+    a->index = key;
+    a->multiplier = multiplier;
     return a;
 }
+
 struct icfw_mouse_trigger : icfw_input_trigger
 {
-    
-    std::tuple<bool, float> GetValue()
+    icfw_trigger_value GetValue(const void* asker) override
     {
-        if(index < 8)
+        if(engine::IsMouseButton(index))
         {
-            if(!engine::consumed_mouse_buttons.contains(engine::mouse_mapping[index]))
-            {
-                return {false, engine::current_state.mouse_buttons[engine::mouse_mapping[index]] ? multiplier : 0.0f};
-            }
-            else
-            {
-                return {true, 0.0f};
-            }
+            if(!engine::IsAvailable(engine::consumed_mouse_buttons, index, asker)) { return {true, 0.0f}; }
+            return {false, engine::current_state.mouse_buttons[index] ? multiplier : 0.0f};
         }
-        else
-        {
-            if(!engine::consumed_mouse_axis.contains(index))
-            {
-                return {false, engine::current_state.mouse_axis[index] * multiplier};
-            }
-            else
-            {
-                return {true, 0.0f};
-            }
-        }
-        return {false, 0.0f};
+        if(!engine::IsAvailable(engine::consumed_mouse_axis, index, asker)) { return {true, 0.0f}; }
+        return {false, engine::current_state.mouse_axis[index] * multiplier};
     }
-    void Consume()
+    void Consume(const void* owner) override
     {
-        if(index < 8)
-        {
-            engine::consumed_mouse_buttons.insert(engine::mouse_mapping[index]);
-        }
-        else
-        {
-            engine::consumed_mouse_axis.insert(index);
-        }
+        if(engine::IsMouseButton(index)) { engine::Consume(engine::consumed_mouse_buttons, index, owner); }
+        else                             { engine::Consume(engine::consumed_mouse_axis, index, owner); }
+    }
+    void Register() override
+    {
+        if(engine::IsMouseButton(index)) { engine::mouse_buttons_to_gather.push_back(index); }
+        else                             { engine::mouse_axis_to_gather.push_back(index); }
     }
 };
-static std::shared_ptr<icfw_input_trigger> MOUSE_TRIGGER(icfw_mouse_inputs mouse_input, float multiplier = 1.0f)
+inline std::shared_ptr<icfw_input_trigger> MOUSE_TRIGGER(icfw_mouse_inputs mouse_input, float multiplier = 1.0f)
 {
     auto a = std::make_shared<icfw_mouse_trigger>();
-    a.get()->index = mouse_input;
-    a.get()->multiplier = multiplier;
+    a->index = mouse_input;
+    a->multiplier = multiplier;
     return a;
 }
+
 struct icfw_gamepad_trigger : icfw_input_trigger
 {
-    
-    std::tuple<bool, float> GetValue()
+    float deadzone = 0.15f; // only applies to axes
+
+    icfw_trigger_value GetValue(const void* asker) override
     {
-        if(!IsGamepadAvailable(0))
+        if(engine::IsGamepadButton(index))
         {
-            return {false, 0.0f};
+            if(!engine::IsAvailable(engine::consumed_gamepad_buttons, index, asker)) { return {true, 0.0f}; }
+            return {false, engine::current_state.gamepad_buttons[index] ? multiplier : 0.0f};
         }
-        if(index < 19)
-        {
-            if(!engine::consumed_gamepad_buttons.contains(engine::gamepad_mapping[index]))
-            {
-                return {false, engine::current_state.gamepad_buttons[engine::gamepad_mapping[index]] ? multiplier : 0.0f};
-            }
-            else
-            {
-                return {true, 0.0f};
-            }
-        }
-        else
-        {
-            if(!engine::consumed_gamepad_axis.contains(engine::gamepad_mapping[index]))
-            {
-                return {false, engine::current_state.gamepad_axis[engine::gamepad_mapping[index]] * multiplier};
-            }
-            else
-            {
-                return {true, 0.0f};
-            }
-        }
+        if(!engine::IsAvailable(engine::consumed_gamepad_axis, index, asker)) { return {true, 0.0f}; }
+        float v = engine::current_state.gamepad_axis[index];
+        if(std::fabs(v) < deadzone) { v = 0.0f; }
+        return {false, v * multiplier};
     }
-    void Consume()
+    void Consume(const void* owner) override
     {
-        if(index < 19)
-        {
-            engine::consumed_gamepad_buttons.insert(engine::gamepad_mapping[index]);
-        }
-        else
-        {
-            engine::consumed_gamepad_axis.insert(engine::gamepad_mapping[index]);
-        }
+        if(engine::IsGamepadButton(index)) { engine::Consume(engine::consumed_gamepad_buttons, index, owner); }
+        else                               { engine::Consume(engine::consumed_gamepad_axis, index, owner); }
+    }
+    void Register() override
+    {
+        if(engine::IsGamepadButton(index)) { engine::gamepad_buttons_to_gather.push_back(index); }
+        else                               { engine::gamepad_axis_to_gather.push_back(index); }
     }
 };
-static std::shared_ptr<icfw_input_trigger> GAMEPAD_TRIGGER(icfw_gamepad_inputs gamepad_input, float multiplier = 1.0f)
+inline std::shared_ptr<icfw_input_trigger> GAMEPAD_TRIGGER(icfw_gamepad_inputs gamepad_input, float multiplier = 1.0f, float deadzone = 0.15f)
 {
     auto a = std::make_shared<icfw_gamepad_trigger>();
-    a.get()->index = gamepad_input;
-    a.get()->multiplier = multiplier;
+    a->index = gamepad_input;
+    a->multiplier = multiplier;
+    a->deadzone = deadzone;
     return a;
 }
+
+using icfw_digital_callback = std::function<bool (icfw_digital_action_state, bool)>;
+using icfw_axis_callback = std::function<bool (float)>;
 
 struct icfw_input_action
 {
     icfw_input_value_type value_type = digital;
-    std::variant<icfw_digital_action_state, bool> last_state = false;
+    icfw_digital_action_state last_state = up; // only used by digital actions
+    // A threshold for digital actions
+    float actuation = 0.5f;
     std::vector<std::shared_ptr<icfw_input_trigger>> triggers;
-    std::variant<std::function<bool (icfw_digital_action_state, bool)>, std::function<bool (float)>> callback;
+    std::variant<icfw_digital_callback, icfw_axis_callback> callback;
 };
-static icfw_input_action INPUT_ACTION(icfw_input_value_type value_type, std::vector<std::shared_ptr<icfw_input_trigger>> triggers, std::variant<std::function<bool (icfw_digital_action_state, bool)>, std::function<bool (float)>> callback)
+
+// Explicit value type, throws if it doesn't match the callback
+inline icfw_input_action INPUT_ACTION(icfw_input_value_type value_type, std::vector<std::shared_ptr<icfw_input_trigger>> triggers, std::variant<icfw_digital_callback, icfw_axis_callback> callback, float actuation = 0.5f)
 {
+    if((value_type == digital) != std::holds_alternative<icfw_digital_callback>(callback))
+    {
+        throw std::invalid_argument("INPUT_ACTION: value_type does not match the callback signature");
+    }
     auto a = icfw_input_action();
     a.value_type = value_type;
-    if(value_type == digital)
-    {
-        a.last_state = up;
-    }
-    a.triggers = triggers;
-    a.callback = callback;
+    a.actuation = actuation;
+    a.triggers = std::move(triggers);
+    a.callback = std::move(callback);
     return a;
 }
+// Value type inferred from the callback
+inline icfw_input_action INPUT_ACTION(std::vector<std::shared_ptr<icfw_input_trigger>> triggers, icfw_digital_callback callback, float actuation = 0.5f)
+{
+    return INPUT_ACTION(digital, std::move(triggers), std::move(callback), actuation);
+}
+inline icfw_input_action INPUT_ACTION(std::vector<std::shared_ptr<icfw_input_trigger>> triggers, icfw_axis_callback callback)
+{
+    return INPUT_ACTION(single_axis, std::move(triggers), std::move(callback));
+}
+
 struct icfw_input_mapping
 {
     std::vector<icfw_input_action> actions;
 };
-static icfw_input_mapping INPUT_MAPPING(std::vector<icfw_input_action> actions)
+inline icfw_input_mapping INPUT_MAPPING(std::vector<icfw_input_action> actions)
 {
     auto a = icfw_input_mapping();
-    a.actions = actions;
+    a.actions = std::move(actions);
     return a;
 }
 
@@ -665,22 +698,13 @@ inline void AddMapping(icfw_input_mapping mapping, std::string name="")
         target_name = std::to_string(engine::input_mappings.size()); // If no name is provided use the index the mapping will be assigned as the name
     }
 
-    engine::input_mappings[target_name] = mapping;
-}
-
-namespace engine {
-    // Removes duplicate integers from a vector
-    inline void RemoveDuplicates(std::vector<int> &v)
-    {
-        std::unordered_set<int> seen;
-        v.erase(std::remove_if(v.begin(), v.end(), [&](int x) { return !seen.insert(x).second; }), v.end());
-    }
+    engine::input_mappings[target_name] = std::move(mapping);
 }
 
 namespace icfw_internal
 {
 // Loads a mapping based on it's name
-// Internal use only
+// Internal use only, use RequestMapping()
 inline void LoadMapping(std::string name)
 {
     engine::current_input_mapping = name;
@@ -692,54 +716,27 @@ inline void LoadMapping(std::string name)
     engine::gamepad_axis_to_gather.clear();
 
     engine::current_state = icfw_input_state();
+    // consumed_* is intentionally kept: a button held through a mapping change stays consumed until released
 
-    if(name == "" || !engine::input_mappings.contains(name))  {   return;   }
-
-    icfw_input_mapping &loaded_mapping = engine::input_mappings[name];
-
-    for (size_t i = 0; i < loaded_mapping.actions.size(); i++) // Loop through all actions and their triggers and add them to the gather lists
+    if(name != "" && engine::input_mappings.contains(name))
     {
-        loaded_mapping.actions[(int)i].last_state = icfw_digital_action_state::up;
-        auto a = loaded_mapping.actions[(int)i];
-        for (const auto& trigger : a.triggers)
+        for (auto& action : engine::input_mappings[name].actions)
         {
-            if(auto c = dynamic_cast<icfw_keyboard_trigger*>(trigger.get()))
+            action.last_state = up;
+            for (const auto& trigger : action.triggers)
             {
-                engine::keyboard_buttons_to_gather.push_back(c->index);
-            }
-            if(auto c = dynamic_cast<icfw_mouse_trigger*>(trigger.get()))
-            {
-                if(c->index < 8)
-                {
-                    engine::mouse_buttons_to_gather.push_back(engine::mouse_mapping[c->index]);
-                }
-                else
-                {
-                    engine::mouse_axis_to_gather.push_back(c->index);
-                }
-            }
-            if(auto c = dynamic_cast<icfw_gamepad_trigger*>(trigger.get()))
-            {
-                if(c->index < 19)
-                {
-                    engine::gamepad_buttons_to_gather.push_back(engine::gamepad_mapping[c->index]);
-                }
-                else
-                {
-                    engine::gamepad_axis_to_gather.push_back(engine::gamepad_mapping[c->index]);
-                }
+                trigger->Register();
             }
         }
-        
     }
-    
-    #ifdef ICFW_UI
-    if (engine::input_mode == icfw_input_mode::ui || engine::input_mode == icfw_input_mode::game_ui || engine::input_mode == icfw_input_mode::ui_game)
+
+    if(engine::IsUIMode(engine::input_mode))
     {
-        engine::mouse_buttons_to_gather.push_back(icfw_mouse_inputs::mouse_left);
-        engine::mouse_buttons_to_gather.push_back(icfw_mouse_inputs::mouse_right);
+        engine::mouse_buttons_to_gather.push_back(mouse_left);
+        engine::mouse_buttons_to_gather.push_back(mouse_right);
+        engine::mouse_buttons_to_gather.push_back(mouse_middle);
+        engine::mouse_axis_to_gather.push_back(mouse_scroll);
     }
-    #endif
 
     engine::RemoveDuplicates(engine::keyboard_buttons_to_gather);
     engine::RemoveDuplicates(engine::mouse_buttons_to_gather);
@@ -755,176 +752,122 @@ inline void RequestMapping(std::string name)
     engine::pending_mapping = name;
 }
 
-// Changes input mode and internally calls request mapping
+// Changes input mode, the gather lists are rebuilt at the start of the next input tick
 inline void ChangeInputMode(icfw_input_mode target)
 {
     engine::input_mode = target;
-    RequestMapping(engine::current_input_mapping);
+    if(!engine::pending_mapping) // don't overwrite a mapping that was requested this frame
+    {
+        RequestMapping(engine::current_input_mapping);
+    }
 }
+
 inline void GatherInputs()
 {
-    engine::current_state = icfw_input_state();
+    auto& s = engine::current_state;
+    const bool gamepad = IsGamepadAvailable(0);
 
-    std::erase_if(engine::consumed_keyboard_buttons, [](int k){ return !engine::current_state.keyboard_buttons[k]; });
-    std::erase_if(engine::consumed_mouse_buttons, [](int m){ return !engine::current_state.mouse_buttons[m]; });
-    std::erase_if(engine::consumed_gamepad_buttons, [](int g){ return !engine::current_state.gamepad_buttons[g]; });
-    engine::consumed_mouse_axis.clear();
-    engine::consumed_gamepad_axis.clear();
+    s.mouse_position = GetMousePosition();
 
-    for (int i = 0; i < (int)engine::keyboard_buttons_to_gather.size(); i++)
+    for (int k : engine::keyboard_buttons_to_gather)
     {
-        engine::current_state.keyboard_buttons[engine::keyboard_buttons_to_gather[i]] = IsKeyDown(engine::keyboard_buttons_to_gather[i]);
+        s.keyboard_buttons[k] = IsKeyDown(k);
     }
     for (int m : engine::mouse_buttons_to_gather)
     {
-        engine::current_state.mouse_buttons[m] = IsMouseButtonDown(engine::ToRaylib((icfw_mouse_inputs)m));
+        s.mouse_buttons[m] = IsMouseButtonDown(engine::ToRaylib((icfw_mouse_inputs)m));
     }
-    for (int i = 0; i < (int)engine::mouse_axis_to_gather.size(); i++)
+    for (int m : engine::mouse_axis_to_gather)
     {
         float a = 0.0f;
-        if(engine::mouse_axis_to_gather[i] == 8)
+        switch (m)
         {
-            a = GetMouseWheelMove();
+        case mouse_scroll: a = GetMouseWheelMove(); break;
+        case mouse_x:      a = GetMouseDelta().x;   break;
+        case mouse_y:      a = GetMouseDelta().y;   break;
+        default: break;
         }
-        else if(engine::mouse_axis_to_gather[i] == 9)
-        {
-            a = GetMouseDelta().x; 
-        }
-        else if(engine::mouse_axis_to_gather[i] == 10)
-        {
-            a = GetMouseDelta().y; 
-        }
-        engine::current_state.mouse_axis[engine::mouse_axis_to_gather[i]] = a;
+        s.mouse_axis[m] = a;
     }
     for (int g : engine::gamepad_buttons_to_gather)
     {
-        if(IsGamepadAvailable(0))
-        {
-            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[g]] = IsGamepadButtonDown(0, engine::ToRaylib((icfw_gamepad_inputs)g));
-        }
-        else
-        {
-            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[g]] = 0.0f;
-        }
+        s.gamepad_buttons[g] = gamepad && IsGamepadButtonDown(0, engine::ToRaylib((icfw_gamepad_inputs)g));
     }
-    for (int i = 0; i < (int)engine::gamepad_axis_to_gather.size(); i++)
+    for (int g : engine::gamepad_axis_to_gather)
     {
-        if(IsGamepadAvailable(0))
+        float v = gamepad ? GetGamepadAxisMovement(0, engine::ToRaylib((icfw_gamepad_inputs)g)) : 0.0f;
+        if(g == gamepad_axis_left_trigger || g == gamepad_axis_right_trigger)
         {
-            engine::current_state.gamepad_axis[engine::gamepad_axis_to_gather[i]] = GetGamepadAxisMovement(0, engine::gamepad_axis_to_gather[i]);
+            v = gamepad ? (v + 1.0f) * 0.5f : 0.0f; // raylib triggers rest at -1, remap to 0..1
         }
-        else
-        {
-            engine::current_state.gamepad_axis[engine::gamepad_axis_to_gather[i]] = 0.0f;
-        }
+        s.gamepad_axis[g] = v;
     }
+
+    // Release consumed buttons that are no longer held (must run AFTER the state above is gathered)
+    std::erase_if(engine::consumed_keyboard_buttons, [&](const auto& c){ return !s.keyboard_buttons[c.first]; });
+    std::erase_if(engine::consumed_mouse_buttons,    [&](const auto& c){ return !s.mouse_buttons[c.first]; });
+    std::erase_if(engine::consumed_gamepad_buttons,  [&](const auto& c){ return !s.gamepad_buttons[c.first]; });
+    engine::consumed_mouse_axis.clear();
+    engine::consumed_gamepad_axis.clear();
 }
+
 inline void UpdateActions()
 {
-    if(engine::current_input_mapping == "") {   return;   }
+    if(engine::current_input_mapping == "" || !engine::input_mappings.contains(engine::current_input_mapping)) { return; }
     icfw_input_mapping &current_mapping = engine::input_mappings[engine::current_input_mapping];
 
     for (auto& action : current_mapping.actions)
     {
-        float evaluation = 0.0f;
+        const void* owner = &action;
 
+        float evaluation = 0.0f;
         for (const auto& trigger : action.triggers)
         {
-            auto val = trigger.get()->GetValue();
-
-            if(!std::get<0>(val))
+            auto val = trigger->GetValue(owner);
+            if(!val.consumed)
             {
-                evaluation += std::get<1>(val);
+                evaluation += val.value;
             }
         }
-        
+
+        bool consume = false;
         if(action.value_type == digital)
         {
-            bool call_callback = false;
-            icfw_digital_action_state old_state = std::get<icfw_digital_action_state>(action.last_state);
+            const bool pressed = evaluation > action.actuation;
+            const icfw_digital_action_state old_state = action.last_state;
             icfw_digital_action_state new_state = up;
             switch (old_state)
             {
             case press_started:
-                call_callback = true;
-                if(evaluation > 0.0f)
-                {
-                    new_state = held_down;
-                }
-                else
-                {
-                    new_state = press_finished;
-                }
-                break;
-            case held_down:
-                call_callback = true;
-                if(evaluation > 0.0f)
-                {
-                    new_state = held_down;
-                }
-                else
-                {
-                    new_state = press_finished;
-                }
-                break;
+            case held_down:      new_state = pressed ? held_down     : press_finished; break;
             case press_finished:
-                call_callback = true;
-                if(evaluation > 0.0f)
-                {
-                    new_state = press_started;
-                }
-                else
-                {
-                    new_state = up;
-                }
-                break;
-            case up:
-                call_callback = true;
-                if(evaluation > 0.0f)
-                {
-                    new_state = press_started;
-                }
-                else
-                {
-                    new_state = up;
-                }
-                break;
-            default:
-                break;
+            case up:             new_state = pressed ? press_started : up;             break;
             }
-            if(call_callback)
-            {
-                if(std::get<std::function<bool (icfw_digital_action_state, bool)>>(action.callback)(new_state, new_state != old_state)) // Send the value to the callback
-                {
-                    for (int j = 0; j < (int)action.triggers.size(); j++) // Consume all triggers if callback returns true
-                    {
-                        auto trigger = action.triggers[j];
-                        trigger.get()->Consume();
-                    }
-                }
-            }
-            
             action.last_state = new_state;
+            consume = std::get<icfw_digital_callback>(action.callback)(new_state, new_state != old_state);
         }
         else
         {
-            if(std::get<std::function<bool (float)>>(action.callback)(evaluation)) // Send the value to the callback
+            consume = std::get<icfw_axis_callback>(action.callback)(evaluation);
+        }
+
+        if(consume) // Consume all triggers if callback returns true
+        {
+            for (const auto& trigger : action.triggers)
             {
-                for (const auto& trigger : action.triggers) // Consume all triggers if callback returns true
-                {
-                    trigger.get()->Consume();
-                }
+                trigger->Consume(owner);
             }
         }
     }
-    
 }
+
 #if defined(ICFW_UI)
 inline void UpdateUIInput()
 {
-
+    // Canvases read engine::current_state and consume with engine::Consume(..., &engine::ui_owner)
 }
 #endif
+
 inline void InputTick()
 {
     if(engine::pending_mapping)
@@ -932,8 +875,20 @@ inline void InputTick()
         icfw_internal::LoadMapping(*engine::pending_mapping);
         engine::pending_mapping.reset();
     }
+    if(engine::input_mode == icfw_input_mode::disabled) { return; }
+
     GatherInputs();
-    UpdateActions();
+
+    switch (engine::input_mode)
+    {
+    case icfw_input_mode::game:    UpdateActions(); break;
+#if defined(ICFW_UI)
+    case icfw_input_mode::ui:      UpdateUIInput(); break;
+    case icfw_input_mode::game_ui: UpdateActions(); UpdateUIInput(); break;
+    case icfw_input_mode::ui_game: UpdateUIInput(); UpdateActions(); break;
+#endif
+    default: break;
+    }
 }
 
 #endif
