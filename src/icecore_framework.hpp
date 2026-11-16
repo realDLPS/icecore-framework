@@ -2,6 +2,8 @@
 
 #include "../raylib-6.0/src/raylib.h"
 
+#define ICFW_UI // Temp define for duration of writing
+
 #pragma region Vector helpers
 #include "../raylib-6.0/src/raylib.h"
 #include "../raylib-6.0/src/raymath.h"
@@ -384,8 +386,8 @@ enum icfw_input_mode
     game = 2,
 #if defined(ICFW_UI)
     ui = 3,
-    game_ui = 4,
-    ui_game = 5,
+    game_ui = 4, // Prioritise game over ui
+    ui_game = 5, // Prioritise ui over game
 #endif
 };
 
@@ -416,11 +418,6 @@ enum icfw_mouse_inputs
     mouse_x = 9,
     mouse_y = 10,
 };
-namespace engine{
-    // Mappings of icfw mouse inputs to raylib mouse inputs
-    static int mouse_mapping[7] = {MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_MIDDLE_BUTTON, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_BACK, MOUSE_BUTTON_SIDE, MOUSE_BUTTON_EXTRA};
-}
-
 enum icfw_gamepad_inputs
 {
     gamepad_button_unknown = 1,
@@ -449,11 +446,15 @@ enum icfw_gamepad_inputs
     gamepad_axis_right_trigger = 24,
 };
 namespace engine{
-    // Mappings of icfw gamepad inputs to raylib gamepad inputs
+    // Mappings of icfw mouse & gamepad inputs to raylib mouse & gamepad inputs
+    static int mouse_mapping[7] = {MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_BACK, MOUSE_BUTTON_SIDE, MOUSE_BUTTON_EXTRA};
     static int gamepad_mapping[24] = {GAMEPAD_BUTTON_UNKNOWN, GAMEPAD_BUTTON_LEFT_FACE_UP, GAMEPAD_BUTTON_LEFT_FACE_RIGHT, GAMEPAD_BUTTON_LEFT_FACE_DOWN, GAMEPAD_BUTTON_LEFT_FACE_LEFT, GAMEPAD_BUTTON_RIGHT_FACE_UP, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT, GAMEPAD_BUTTON_RIGHT_FACE_DOWN, GAMEPAD_BUTTON_RIGHT_FACE_LEFT, GAMEPAD_BUTTON_LEFT_TRIGGER_1, GAMEPAD_BUTTON_LEFT_TRIGGER_2, GAMEPAD_BUTTON_RIGHT_TRIGGER_1, GAMEPAD_BUTTON_RIGHT_TRIGGER_2, GAMEPAD_BUTTON_MIDDLE_LEFT, GAMEPAD_BUTTON_MIDDLE, GAMEPAD_BUTTON_MIDDLE_RIGHT, GAMEPAD_BUTTON_LEFT_THUMB, GAMEPAD_BUTTON_RIGHT_THUMB, GAMEPAD_AXIS_LEFT_X, GAMEPAD_AXIS_LEFT_Y, GAMEPAD_AXIS_RIGHT_X, GAMEPAD_AXIS_RIGHT_Y, GAMEPAD_AXIS_LEFT_TRIGGER, GAMEPAD_AXIS_RIGHT_TRIGGER};
+    inline int ToRaylib(icfw_mouse_inputs m)   { return mouse_mapping[m - 1]; }
+    inline int ToRaylib(icfw_gamepad_inputs g) { return gamepad_mapping[g - 1]; }
 }
 
-struct icfw_input_mapping;
+
+struct icfw_input_mapping; // Forward declare
 struct icfw_input_state
 {
     std::unordered_map<int, bool> keyboard_buttons = std::unordered_map<int, bool>();
@@ -466,8 +467,10 @@ struct icfw_input_state
 namespace engine {
     inline std::map<std::string, icfw_input_mapping> input_mappings = std::map<std::string, icfw_input_mapping>();
     inline std::string current_input_mapping = "";
+    inline icfw_input_mode input_mode = icfw_input_mode::game;
 
     // These are updated any time input mapping is changed
+    inline std::optional<std::string> pending_mapping;
     inline std::vector<int> keyboard_buttons_to_gather = std::vector<int>();
     inline std::vector<int> mouse_buttons_to_gather = std::vector<int>();
     inline std::vector<int> mouse_axis_to_gather = std::vector<int>();
@@ -674,8 +677,10 @@ namespace engine {
     }
 }
 
+namespace icfw_internal
+{
 // Loads a mapping based on it's name
-// Add a mapping first using AddMapping()
+// Internal use only
 inline void LoadMapping(std::string name)
 {
     engine::current_input_mapping = name;
@@ -694,6 +699,7 @@ inline void LoadMapping(std::string name)
 
     for (size_t i = 0; i < loaded_mapping.actions.size(); i++) // Loop through all actions and their triggers and add them to the gather lists
     {
+        loaded_mapping.actions[(int)i].last_state = icfw_digital_action_state::up;
         auto a = loaded_mapping.actions[(int)i];
         for (const auto& trigger : a.triggers)
         {
@@ -727,30 +733,51 @@ inline void LoadMapping(std::string name)
         
     }
     
+    #ifdef ICFW_UI
+    if (engine::input_mode == icfw_input_mode::ui || engine::input_mode == icfw_input_mode::game_ui || engine::input_mode == icfw_input_mode::ui_game)
+    {
+        engine::mouse_buttons_to_gather.push_back(icfw_mouse_inputs::mouse_left);
+        engine::mouse_buttons_to_gather.push_back(icfw_mouse_inputs::mouse_right);
+    }
+    #endif
+
     engine::RemoveDuplicates(engine::keyboard_buttons_to_gather);
     engine::RemoveDuplicates(engine::mouse_buttons_to_gather);
     engine::RemoveDuplicates(engine::mouse_axis_to_gather);
     engine::RemoveDuplicates(engine::gamepad_buttons_to_gather);
     engine::RemoveDuplicates(engine::gamepad_axis_to_gather);
 }
+}
 
+// Changes to the requested mapping at the start of the next input tick
+inline void RequestMapping(std::string name)
+{
+    engine::pending_mapping = name;
+}
+
+// Changes input mode and internally calls request mapping
+inline void ChangeInputMode(icfw_input_mode target)
+{
+    engine::input_mode = target;
+    RequestMapping(engine::current_input_mapping);
+}
 inline void GatherInputs()
 {
     engine::current_state = icfw_input_state();
 
-    engine::consumed_keyboard_buttons.clear();
-    engine::consumed_mouse_buttons.clear();
+    std::erase_if(engine::consumed_keyboard_buttons, [](int k){ return !engine::current_state.keyboard_buttons[k]; });
+    std::erase_if(engine::consumed_mouse_buttons, [](int m){ return !engine::current_state.mouse_buttons[m]; });
+    std::erase_if(engine::consumed_gamepad_buttons, [](int g){ return !engine::current_state.gamepad_buttons[g]; });
     engine::consumed_mouse_axis.clear();
-    engine::consumed_gamepad_buttons.clear();
     engine::consumed_gamepad_axis.clear();
 
     for (int i = 0; i < (int)engine::keyboard_buttons_to_gather.size(); i++)
     {
         engine::current_state.keyboard_buttons[engine::keyboard_buttons_to_gather[i]] = IsKeyDown(engine::keyboard_buttons_to_gather[i]);
     }
-    for (int i = 0; i < (int)engine::mouse_buttons_to_gather.size(); i++)
+    for (int m : engine::mouse_buttons_to_gather)
     {
-        engine::current_state.mouse_buttons[engine::mouse_buttons_to_gather[i]] = IsMouseButtonDown(engine::mouse_buttons_to_gather[i]);
+        engine::current_state.mouse_buttons[m] = IsMouseButtonDown(engine::ToRaylib((icfw_mouse_inputs)m));
     }
     for (int i = 0; i < (int)engine::mouse_axis_to_gather.size(); i++)
     {
@@ -769,15 +796,15 @@ inline void GatherInputs()
         }
         engine::current_state.mouse_axis[engine::mouse_axis_to_gather[i]] = a;
     }
-    for (int i = 0; i < (int)engine::gamepad_buttons_to_gather.size(); i++)
+    for (int g : engine::gamepad_buttons_to_gather)
     {
         if(IsGamepadAvailable(0))
         {
-            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[i]] = IsGamepadButtonDown(0, engine::gamepad_buttons_to_gather[i]);
+            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[g]] = IsGamepadButtonDown(0, engine::ToRaylib((icfw_gamepad_inputs)g));
         }
         else
         {
-            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[i]] = 0.0f;
+            engine::current_state.gamepad_buttons[engine::gamepad_buttons_to_gather[g]] = 0.0f;
         }
     }
     for (int i = 0; i < (int)engine::gamepad_axis_to_gather.size(); i++)
@@ -861,6 +888,7 @@ inline void UpdateActions()
                 {
                     new_state = up;
                 }
+                break;
             default:
                 break;
             }
@@ -899,6 +927,11 @@ inline void UpdateUIInput()
 #endif
 inline void InputTick()
 {
+    if(engine::pending_mapping)
+    {
+        icfw_internal::LoadMapping(*engine::pending_mapping);
+        engine::pending_mapping.reset();
+    }
     GatherInputs();
     UpdateActions();
 }
@@ -934,7 +967,7 @@ Requirements
 Vision
 For example the button is by default complete
 */
-#define ICFW_UI
+
 #if defined(ICFW_UI)
 
 enum anchor
