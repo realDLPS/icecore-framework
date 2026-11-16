@@ -41,7 +41,7 @@ int main(void)
     const int screenHeight = 450;
 
     AddMapping(INPUT_MAPPING({INPUT_ACTION(digital, {KEYBOARD_TRIGGER(KEY_ESCAPE)}, CloseWindowEvent)}), "default");
-    LoadMapping("default");
+    RequestMapping("default");
 
     MP_SetMaxFPS(120);
     MP_InitWindow(tick, screenWidth, screenHeight, "raylib [core] example - basic window");
