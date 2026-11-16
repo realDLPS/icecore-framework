@@ -920,4 +920,40 @@ inline void InputTick()
 
 
 #pragma region ICFW_UI
+/*
+About
+
+Requirements
+- Seamless interop with game input from ICFW_INPUT ie no missed clicks.
+- Elements
+    - Text
+    - Button
+    - Image
+        - 9patch etc
+
+Vision
+For example the button is by default complete
+*/
+#define ICFW_UI
+#if defined(ICFW_UI)
+
+enum anchor
+{
+    top_left = 0,
+    top_middle = 1,
+    top_right = 2,
+    middle_left = 3,
+    middle = 4,
+    middle_right = 5,
+    bottom_left = 6,
+    bottom_middle = 7,
+    bottom_right = 8,
+};
+
+class ui_element
+{
+    ui_element* parent = nullptr;
+    std::vector<std::unique_ptr<ui_element>> children;
+};
+#endif
 #pragma endregion

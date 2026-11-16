@@ -33,12 +33,8 @@
 
 # Outside imports
 raylib-6.0/
+emsdk/
+doctest/
 
 # Build
 build/
-
-# Emscripten
-emsdk/
-
-# doctest
-doctest/
